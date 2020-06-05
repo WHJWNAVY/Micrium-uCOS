@@ -3,7 +3,7 @@
 *                                                uC/LIB
 *                                        CUSTOM LIBRARY MODULES
 *
-*                         (c) Copyright 2004-2015; Micrium, Inc.; Weston, FL
+*                         (c) Copyright 2004-2014; Micrium, Inc.; Weston, FL
 *
 *                  All rights reserved.  Protected by international copyright laws.
 *
@@ -16,9 +16,9 @@
 *                  software available.  Your honesty is greatly appreciated.
 *
 *                  You can find our product's user manual, API reference, release notes and
-*                  more information at: doc.micrium.com
+*                  more information at: https://doc.micrium.com
 *
-*                  You can contact us at: www.micrium.com
+*                  You can contact us at: http://www.micrium.com
 *********************************************************************************************************
 */
 
@@ -28,7 +28,7 @@
 *                                     CORE CUSTOM LIBRARY MODULE
 *
 * Filename      : lib_def.h
-* Version       : V1.38.02
+* Version       : V1.38.01
 * Programmer(s) : ITJ
 *                 FBJ
 *                 JFD
@@ -97,7 +97,7 @@
 *********************************************************************************************************
 */
 
-#define  LIB_VERSION                                   13802u   /* See Note #1.                                         */
+#define  LIB_VERSION                                   13801u   /* See Note #1.                                         */
 
 
 /*
@@ -558,7 +558,7 @@ typedef enum lib_err {
 *********************************************************************************************************
 */
 
-#define  DEF_BIT(bit)                                                   (1uL << (bit))
+#define  DEF_BIT(bit)                                                   (1u << (bit))
 
 
 /*
@@ -773,40 +773,13 @@ typedef enum lib_err {
 *********************************************************************************************************
 */
 
-#define  DEF_BIT_SET_08(val, mask)                     (CPU_INT08U)DEF_BIT_SET((val), (CPU_INT08U)(mask))
+#define  DEF_BIT_SET_08(val, mask)                     DEF_BIT_SET((val), (mask))
 
-#define  DEF_BIT_SET_16(val, mask)                     (CPU_INT16U)DEF_BIT_SET((val), (CPU_INT16U)(mask))
+#define  DEF_BIT_SET_16(val, mask)                     DEF_BIT_SET((val), (mask))
 
-#define  DEF_BIT_SET_32(val, mask)                     (CPU_INT32U)DEF_BIT_SET((val), (CPU_INT32U)(mask))
+#define  DEF_BIT_SET_32(val, mask)                     DEF_BIT_SET((val), (mask))
 
-#define  DEF_BIT_SET_64(val, mask)                     (CPU_INT64U)DEF_BIT_SET((val), (CPU_INT64U)(mask))
-
-
-/*
-*********************************************************************************************************
-*                                          DEF_BIT_CLR_xx()
-*
-* Description : Clear specified bit(s) in a value of specified bit size.
-*
-* Argument(s) : val         Value to modify by clearing specified bit(s).
-*
-*               mask        Mask of bits to clear.
-*
-* Return(s)   : Modified value with specified bit(s) clear.
-*
-* Caller(s)   : Application.
-*
-* Note(s)     : (1) 'val' & 'mask' SHOULD be unsigned integers.
-*********************************************************************************************************
-*/
-
-#define  DEF_BIT_CLR_08(val, mask)                     (CPU_INT08U)((val) = (((CPU_INT08U)val) & (~((CPU_INT08U)mask))))
-
-#define  DEF_BIT_CLR_16(val, mask)                     (CPU_INT16U)((val) = (((CPU_INT16U)val) & (~((CPU_INT16U)mask))))
-
-#define  DEF_BIT_CLR_32(val, mask)                     (CPU_INT32U)((val) = (((CPU_INT32U)val) & (~((CPU_INT32U)mask))))
-
-#define  DEF_BIT_CLR_64(val, mask)                     (CPU_INT64U)((val) = (((CPU_INT64U)val) & (~((CPU_INT64U)mask))))
+#define  DEF_BIT_SET_64(val, mask)                     DEF_BIT_SET((val), (mask))
 
 
 /*
@@ -827,37 +800,36 @@ typedef enum lib_err {
 *********************************************************************************************************
 */
 
-#if     (CPU_CFG_DATA_SIZE_MAX == CPU_WORD_SIZE_08)
-
-#define  DEF_BIT_CLR(val, mask)                 ((sizeof(val) == CPU_WORD_SIZE_08) ? DEF_BIT_CLR_08(val, mask) : 0)
+#define  DEF_BIT_CLR(val, mask)                        ((val) = ((val) & ~(mask)))
 
 
-#elif   (CPU_CFG_DATA_SIZE_MAX == CPU_WORD_SIZE_16)
+/*
+*********************************************************************************************************
+*                                          DEF_BIT_CLR_xx()
+*
+* Description : Clear specified bit(s) in a value of specified bit size.
+*
+* Argument(s) : val         Value to modify by clearing specified bit(s).
+*
+*               mask        Mask of bits to clear.
+*
+* Return(s)   : Modified value with specified bit(s) clear.
+*
+* Caller(s)   : Application.
+*
+* Note(s)     : (1) 'val' & 'mask' SHOULD be unsigned integers.
+*
+*               (2) These macros are deprecated and should be replaced by the DEF_BIT_CLR macro.
+*********************************************************************************************************
+*/
 
-#define  DEF_BIT_CLR(val, mask)                 ((sizeof(val) == CPU_WORD_SIZE_08) ? DEF_BIT_CLR_08(val, mask) :   \
-                                                ((sizeof(val) == CPU_WORD_SIZE_16) ? DEF_BIT_CLR_16(val, mask) : 0))
+#define  DEF_BIT_CLR_08(val, mask)                     DEF_BIT_CLR((val), (mask))
 
+#define  DEF_BIT_CLR_16(val, mask)                     DEF_BIT_CLR((val), (mask))
 
-#elif   (CPU_CFG_DATA_SIZE_MAX == CPU_WORD_SIZE_32)
+#define  DEF_BIT_CLR_32(val, mask)                     DEF_BIT_CLR((val), (mask))
 
-#define  DEF_BIT_CLR(val, mask)                 ((sizeof(val) == CPU_WORD_SIZE_08) ? DEF_BIT_CLR_08(val, mask) :    \
-                                                ((sizeof(val) == CPU_WORD_SIZE_16) ? DEF_BIT_CLR_16(val, mask) :    \
-                                                ((sizeof(val) == CPU_WORD_SIZE_32) ? DEF_BIT_CLR_32(val, mask) : 0)))
-
-
-#elif   (CPU_CFG_DATA_SIZE_MAX == CPU_WORD_SIZE_64)
-
-#define  DEF_BIT_CLR(val, mask)                 ((sizeof(val) == CPU_WORD_SIZE_08) ? DEF_BIT_CLR_08(val, mask) :     \
-                                                ((sizeof(val) == CPU_WORD_SIZE_16) ? DEF_BIT_CLR_16(val, mask) :     \
-                                                ((sizeof(val) == CPU_WORD_SIZE_32) ? DEF_BIT_CLR_32(val, mask) :     \
-                                                ((sizeof(val) == CPU_WORD_SIZE_64) ? DEF_BIT_CLR_64(val, mask) : 0))))
-
-#else
-
-#error  "CPU_CFG_DATA_SIZE_MAX  illegally #defined in 'cpu.h'      "
-#error  "                       [See 'cpu.h  CONFIGURATION ERRORS']"
-
-#endif
+#define  DEF_BIT_CLR_64(val, mask)                     DEF_BIT_CLR((val), (mask))
 
 
 /*
@@ -903,7 +875,7 @@ typedef enum lib_err {
 *********************************************************************************************************
 */
 
-#define  DEF_BIT_FIELD_RD(val, field_mask)              (((val) & (field_mask)) / ((field_mask) & ((~(field_mask)) + 1u)))
+#define  DEF_BIT_FIELD_RD(val, field_mask)              (((val) & (field_mask)) / ((field_mask) & ~((field_mask) << 1u)))
 
 
 /*
@@ -926,7 +898,7 @@ typedef enum lib_err {
 *********************************************************************************************************
 */
 
-#define  DEF_BIT_FIELD_ENC(field_val, field_mask)       (((field_val) * ((field_mask) & ((~(field_mask)) + 1u))) & (field_mask))
+#define  DEF_BIT_FIELD_ENC(field_val, field_mask)       (((field_val) * ((field_mask) & ~((field_mask) << 1u))) & (field_mask))
 
 
 /*

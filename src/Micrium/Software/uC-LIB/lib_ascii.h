@@ -3,7 +3,7 @@
 *                                                uC/LIB
 *                                        CUSTOM LIBRARY MODULES
 *
-*                         (c) Copyright 2004-2015; Micrium, Inc.; Weston, FL
+*                         (c) Copyright 2004-2014; Micrium, Inc.; Weston, FL
 *
 *                  All rights reserved.  Protected by international copyright laws.
 *
@@ -16,9 +16,9 @@
 *                  software available.  Your honesty is greatly appreciated.
 *
 *                  You can find our product's user manual, API reference, release notes and
-*                  more information at: doc.micrium.com
+*                  more information at: https://doc.micrium.com
 *
-*                  You can contact us at: www.micrium.com
+*                  You can contact us at: http://www.micrium.com
 *********************************************************************************************************
 */
 
@@ -28,7 +28,7 @@
 *                                     ASCII CHARACTER OPERATIONS
 *
 * Filename      : lib_ascii.h
-* Version       : V1.38.02
+* Version       : V1.38.01
 * Programmer(s) : BAN
 *********************************************************************************************************
 * Note(s)       : (1) NO compiler-supplied standard library functions are used in library or product software.
@@ -674,7 +674,7 @@
 *
 * Return(s)   : DEF_YES, if character is     a punctuation character.
 *
-*               DEF_NO,  if character is NOT a punctuation character.
+*               DEF_NO,     if character is NOT a punctuation character.
 *
 * Caller(s)   : Application.
 *
@@ -683,10 +683,9 @@
 *********************************************************************************************************
 */
 
-#define  ASCII_IS_PUNCT(c)              ((((c > ASCII_CHAR_SPACE)         && (c < ASCII_CHAR_DIGIT_ZERO))    || \
-                                          ((c > ASCII_CHAR_DIGIT_NINE)    && (c < ASCII_CHAR_LATIN_UPPER_A)) || \
-                                          ((c > ASCII_CHAR_LATIN_UPPER_Z) && (c < ASCII_CHAR_LATIN_LOWER_A)) || \
-                                          ((c > ASCII_CHAR_LATIN_LOWER_Z) && (c < ASCII_CHAR_DELETE))) ? (DEF_YES) : (DEF_NO))
+#define  ASCII_IS_PUNCT(c)             ((((ASCII_IS_PRINT(c)) == DEF_YES) && \
+                                         ((ASCII_IS_SPACE(c)) == DEF_NO ) && \
+                                         ((ASCII_IS_ALPHA_NUM(c)) == DEF_NO )) ? (DEF_YES) : (DEF_NO))
 
 
 /*

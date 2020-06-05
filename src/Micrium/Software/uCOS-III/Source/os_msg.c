@@ -1,34 +1,35 @@
 /*
-*********************************************************************************************************
-*                                                uC/OS-III
-*                                          The Real-Time Kernel
+************************************************************************************************************************
+*                                                      uC/OS-III
+*                                                 The Real-Time Kernel
 *
-*                         (c) Copyright 2009-2018; Silicon Laboratories Inc.,
-*                                400 W. Cesar Chavez, Austin, TX 78701
+*                                  (c) Copyright 2009-2015; Micrium, Inc.; Weston, FL
+*                           All rights reserved.  Protected by international copyright laws.
 *
-*                   All rights reserved. Protected by international copyright laws.
+*                                              MESSAGE HANDLING SERVICES
 *
-*                  Your use of this software is subject to your acceptance of the terms
-*                  of a Silicon Labs Micrium software license, which can be obtained by
-*                  contacting info@micrium.com. If you do not agree to the terms of this
-*                  license, you may not use this software.
+* File    : OS_MSG.C
+* By      : JJL
+* Version : V3.05.01
 *
-*                  Please help us continue to provide the Embedded community with the finest
-*                  software available. Your honesty is greatly appreciated.
+* LICENSING TERMS:
+* ---------------
+*           uC/OS-III is provided in source form for FREE short-term evaluation, for educational use or 
+*           for peaceful research.  If you plan or intend to use uC/OS-III in a commercial application/
+*           product then, you need to contact Micrium to properly license uC/OS-III for its use in your 
+*           application/product.   We provide ALL the source code for your convenience and to help you 
+*           experience uC/OS-III.  The fact that the source is provided does NOT mean that you can use 
+*           it commercially without paying a licensing fee.
 *
-*                    You can find our product's documentation at: doc.micrium.com
+*           Knowledge of the source code may NOT be used to develop a similar product.
 *
-*                          For more information visit us at: www.micrium.com
-*********************************************************************************************************
-*/
-
-/*
-*********************************************************************************************************
-*                                       MESSAGE HANDLING SERVICES
+*           Please help us continue to provide the embedded community with the finest software available.
+*           Your honesty is greatly appreciated.
 *
-* File    : os_msg.c
-* Version : V3.07.03
-*********************************************************************************************************
+*           You can find our product's user manual, API reference, release notes and
+*           more information at https://doc.micrium.com.
+*           You can contact us at www.micrium.com.
+************************************************************************************************************************
 */
 
 #define  MICRIUM_SOURCE
@@ -68,7 +69,7 @@ void  OS_MsgPoolInit (OS_ERR  *p_err)
 
 
 #if (OS_CFG_ARG_CHK_EN == DEF_ENABLED)
-    if (OSCfg_MsgPoolBasePtr == (OS_MSG *)0) {
+    if (OSCfg_MsgPoolBasePtr == DEF_NULL) {
        *p_err = OS_ERR_MSG_POOL_NULL_PTR;
         return;
     }
@@ -84,19 +85,19 @@ void  OS_MsgPoolInit (OS_ERR  *p_err)
     loops  = OSCfg_MsgPoolSize - 1u;
     for (i = 0u; i < loops; i++) {                              /* Init. list of free OS_MSGs                           */
         p_msg1->NextPtr = p_msg2;
-        p_msg1->MsgPtr  = (void *)0;
-        p_msg1->MsgSize =         0u;
+        p_msg1->MsgPtr  = DEF_NULL;
+        p_msg1->MsgSize = 0u;
 #if (OS_CFG_TS_EN == DEF_ENABLED)
-        p_msg1->MsgTS   =         0u;
+        p_msg1->MsgTS   = 0u;
 #endif
         p_msg1++;
         p_msg2++;
     }
-    p_msg1->NextPtr = (OS_MSG *)0;                              /* Last OS_MSG                                          */
-    p_msg1->MsgPtr  = (void   *)0;
-    p_msg1->MsgSize =           0u;
+    p_msg1->NextPtr = DEF_NULL;                                 /* Last OS_MSG                                          */
+    p_msg1->MsgPtr  = DEF_NULL;
+    p_msg1->MsgSize = 0u;
 #if (OS_CFG_TS_EN == DEF_ENABLED)
-    p_msg1->MsgTS   =           0u;
+    p_msg1->MsgTS   = 0u;
 #endif
 
     OSMsgPool.NextPtr    = OSCfg_MsgPoolBasePtr;
@@ -105,7 +106,7 @@ void  OS_MsgPoolInit (OS_ERR  *p_err)
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
     OSMsgPool.NbrUsedMax = 0u;
 #endif
-   *p_err                = OS_ERR_NONE;
+   *p_err                =  OS_ERR_NONE;
 }
 
 
@@ -138,12 +139,12 @@ OS_MSG_QTY  OS_MsgQFreeAll (OS_MSG_Q  *p_msg_q)
         OSMsgPool.NextPtr       = p_msg_q->OutPtr;              /* Point to beginning of message chain                  */
         OSMsgPool.NbrUsed      -= p_msg_q->NbrEntries;          /* Update statistics for free list of messages          */
         OSMsgPool.NbrFree      += p_msg_q->NbrEntries;
-        p_msg_q->NbrEntries     =           0u;                 /* Flush the message queue                              */
+        p_msg_q->NbrEntries     = 0u;                           /* Flush the message queue                              */
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
-        p_msg_q->NbrEntriesMax  =           0u;
+        p_msg_q->NbrEntriesMax  = 0u;
 #endif
-        p_msg_q->InPtr          = (OS_MSG *)0;
-        p_msg_q->OutPtr         = (OS_MSG *)0;
+        p_msg_q->InPtr          = DEF_NULL;
+        p_msg_q->OutPtr         = DEF_NULL;
     }
     return (qty);
 }
@@ -158,7 +159,7 @@ OS_MSG_QTY  OS_MsgQFreeAll (OS_MSG_Q  *p_msg_q)
 * Arguments  : p_msg_q      is a pointer to the message queue to initialize
 *              -------
 *
-*              size          is the maximum number of entries that a message queue can have.
+*              max          is the maximum number of entries that a message queue can have.
 *
 * Returns    : none
 *
@@ -170,12 +171,12 @@ void  OS_MsgQInit (OS_MSG_Q    *p_msg_q,
                    OS_MSG_QTY   size)
 {
     p_msg_q->NbrEntriesSize = size;
-    p_msg_q->NbrEntries     =           0u;
+    p_msg_q->NbrEntries     = 0u;
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
-    p_msg_q->NbrEntriesMax  =           0u;
+    p_msg_q->NbrEntriesMax  = 0u;
 #endif
-    p_msg_q->InPtr          = (OS_MSG *)0;
-    p_msg_q->OutPtr         = (OS_MSG *)0;
+    p_msg_q->InPtr          = DEF_NULL;
+    p_msg_q->OutPtr         = DEF_NULL;
 }
 
 
@@ -219,28 +220,28 @@ void  *OS_MsgQGet (OS_MSG_Q     *p_msg_q,
     if (p_msg_q->NbrEntries == 0u) {                            /* Is the queue empty?                                  */
        *p_msg_size = 0u;                                        /* Yes                                                  */
 #if (OS_CFG_TS_EN == DEF_ENABLED)
-        if (p_ts != (CPU_TS *)0) {
+        if (p_ts != DEF_NULL) {
            *p_ts = 0u;
         }
 #endif
        *p_err = OS_ERR_Q_EMPTY;
-        return ((void *)0);
+        return (DEF_NULL);
     }
 
     p_msg           = p_msg_q->OutPtr;                          /* No, get the next message to extract from the queue   */
     p_void          = p_msg->MsgPtr;
    *p_msg_size      = p_msg->MsgSize;
 #if (OS_CFG_TS_EN == DEF_ENABLED)
-    if (p_ts != (CPU_TS *)0) {
+    if (p_ts != DEF_NULL) {
        *p_ts = p_msg->MsgTS;
     }
 #endif
 
     p_msg_q->OutPtr = p_msg->NextPtr;                           /* Point to next message to extract                     */
 
-    if (p_msg_q->OutPtr == (OS_MSG *)0) {                       /* Are there any more messages in the queue?            */
-        p_msg_q->InPtr      = (OS_MSG *)0;                      /* No                                                   */
-        p_msg_q->NbrEntries =           0u;
+    if (p_msg_q->OutPtr == DEF_NULL) {                          /* Are there any more messages in the queue?            */
+        p_msg_q->InPtr      = DEF_NULL;                         /* No                                                   */
+        p_msg_q->NbrEntries = 0u;
     } else {
         p_msg_q->NbrEntries--;                                  /* Yes, One less message in the queue                   */
     }
@@ -312,7 +313,7 @@ void  OS_MsgQPut (OS_MSG_Q     *p_msg_q,
         return;
     }
 
-    p_msg = OSMsgPool.NextPtr;                                  /* Remove message control block from free list          */
+    p_msg             = OSMsgPool.NextPtr;                      /* Remove message control block from free list          */
     OSMsgPool.NextPtr = p_msg->NextPtr;
     OSMsgPool.NbrFree--;
     OSMsgPool.NbrUsed++;
@@ -326,14 +327,14 @@ void  OS_MsgQPut (OS_MSG_Q     *p_msg_q,
     if (p_msg_q->NbrEntries == 0u) {                            /* Is this first message placed in the queue?           */
         p_msg_q->InPtr         = p_msg;                         /* Yes                                                  */
         p_msg_q->OutPtr        = p_msg;
-        p_msg_q->NbrEntries    =           1u;
-        p_msg->NextPtr         = (OS_MSG *)0;
+        p_msg_q->NbrEntries    = 1u;
+        p_msg->NextPtr         = DEF_NULL;
     } else {                                                    /* No                                                   */
         if ((opt & OS_OPT_POST_LIFO) == OS_OPT_POST_FIFO) {     /* Is it FIFO or LIFO?                                  */
             p_msg_in           = p_msg_q->InPtr;                /* FIFO, add to the head                                */
             p_msg_in->NextPtr  = p_msg;
             p_msg_q->InPtr     = p_msg;
-            p_msg->NextPtr     = (OS_MSG *)0;
+            p_msg->NextPtr     = DEF_NULL;
         } else {
             p_msg->NextPtr     = p_msg_q->OutPtr;               /* LIFO, add to the tail                                */
             p_msg_q->OutPtr    = p_msg;

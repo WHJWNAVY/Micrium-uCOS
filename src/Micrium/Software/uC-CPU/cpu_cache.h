@@ -3,22 +3,21 @@
 *                                                uC/CPU
 *                                    CPU CONFIGURATION & PORT LAYER
 *
-*                         (c) Copyright 2004-2018; Silicon Laboratories Inc.,
-*                                400 W. Cesar Chavez, Austin, TX 78701
+*                          (c) Copyright 2004-2015; Micrium, Inc.; Weston, FL
 *
-*                   All rights reserved. Protected by international copyright laws.
+*               All rights reserved.  Protected by international copyright laws.
 *
-*                  Your use of this software is subject to your acceptance of the terms
-*                  of a Silicon Labs Micrium software license, which can be obtained by
-*                  contacting info@micrium.com. If you do not agree to the terms of this
-*                  license, you may not use this software.
+*               uC/CPU is provided in source form to registered licensees ONLY.  It is 
+*               illegal to distribute this source code to any third party unless you receive 
+*               written permission by an authorized Micrium representative.  Knowledge of 
+*               the source code may NOT be used to develop a similar product.
 *
-*                  Please help us continue to provide the Embedded community with the finest
-*                  software available. Your honesty is greatly appreciated.
+*               Please help us continue to provide the Embedded community with the finest 
+*               software available.  Your honesty is greatly appreciated.
 *
-*                    You can find our product's documentation at: doc.micrium.com
-*
-*                          For more information visit us at: www.micrium.com
+*               You can find our product's user manual, API reference, release notes and
+*               more information at https://doc.micrium.com.
+*               You can contact us at www.micrium.com.
 *********************************************************************************************************
 */
 
@@ -27,8 +26,9 @@
 *
 *                                           CACHE CPU MODULE
 *
-* Filename : cpu_cache.h
-* Version  : V1.31.04
+* Filename      : cpu_cache.h
+* Version       : V1.30.02
+* Programmer(s) : JBL
 *********************************************************************************************************
 */
 
@@ -37,7 +37,7 @@
 *********************************************************************************************************
 *                                               MODULE
 *
-* Note(s) : (1) This cache CPU header file is protected from multiple pre-processor inclusion through use of
+* Note(s) : (1) This cache CPU header file is protected from multiple pre-processor inclusion through use of 
 *               the  cache CPU module present pre-processor macro definition.
 *********************************************************************************************************
 */

@@ -1,34 +1,35 @@
 /*
-*********************************************************************************************************
-*                                                uC/OS-III
-*                                          The Real-Time Kernel
+************************************************************************************************************************
+*                                                      uC/OS-III
+*                                                 The Real-Time Kernel
 *
-*                         (c) Copyright 2009-2018; Silicon Laboratories Inc.,
-*                                400 W. Cesar Chavez, Austin, TX 78701
+*                                  (c) Copyright 2009-2015; Micrium, Inc.; Weston, FL
+*                           All rights reserved.  Protected by international copyright laws.
 *
-*                   All rights reserved. Protected by international copyright laws.
+*                                                   TASK MANAGEMENT
 *
-*                  Your use of this software is subject to your acceptance of the terms
-*                  of a Silicon Labs Micrium software license, which can be obtained by
-*                  contacting info@micrium.com. If you do not agree to the terms of this
-*                  license, you may not use this software.
+* File    : OS_TASK.C
+* By      : JJL
+* Version : V3.05.01
 *
-*                  Please help us continue to provide the Embedded community with the finest
-*                  software available. Your honesty is greatly appreciated.
+* LICENSING TERMS:
+* ---------------
+*           uC/OS-III is provided in source form for FREE short-term evaluation, for educational use or
+*           for peaceful research.  If you plan or intend to use uC/OS-III in a commercial application/
+*           product then, you need to contact Micrium to properly license uC/OS-III for its use in your
+*           application/product.   We provide ALL the source code for your convenience and to help you
+*           experience uC/OS-III.  The fact that the source is provided does NOT mean that you can use
+*           it commercially without paying a licensing fee.
 *
-*                    You can find our product's documentation at: doc.micrium.com
+*           Knowledge of the source code may NOT be used to develop a similar product.
 *
-*                          For more information visit us at: www.micrium.com
-*********************************************************************************************************
-*/
-
-/*
-*********************************************************************************************************
-*                                            TASK MANAGEMENT
+*           Please help us continue to provide the embedded community with the finest software available.
+*           Your honesty is greatly appreciated.
 *
-* File    : os_task.c
-* Version : V3.07.03
-*********************************************************************************************************
+*           You can find our product's user manual, API reference, release notes and
+*           more information at https://doc.micrium.com.
+*           You can contact us at www.micrium.com.
+************************************************************************************************************************
 */
 
 #define  MICRIUM_SOURCE
@@ -78,14 +79,14 @@ void  OSTaskChangePrio (OS_TCB   *p_tcb,
 
 
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return;
     }
 #endif
 
 #if (OS_CFG_ARG_CHK_EN == DEF_ENABLED)
-    if ((p_tcb != (OS_TCB *)0) && (p_tcb->TaskState == OS_TASK_STATE_DEL)) {
+    if ((p_tcb != DEF_NULL) && (p_tcb->TaskState == OS_TASK_STATE_DEL)) {
        *p_err = OS_ERR_STATE_INVALID;
         return;
     }
@@ -98,16 +99,23 @@ void  OSTaskChangePrio (OS_TCB   *p_tcb,
     }
 #endif
 
+#if (OS_CFG_ISR_POST_DEFERRED_EN == DEF_ENABLED)
+    if (prio_new == 0u) {                                        /* Cannot set to IntQueue Task priority                 */
+       *p_err = OS_ERR_PRIO_INVALID;
+        return;
+    }
+#endif
+
     if (prio_new >= (OS_CFG_PRIO_MAX - 1u)) {                   /* Cannot set to Idle Task priority                     */
        *p_err = OS_ERR_PRIO_INVALID;
         return;
     }
 
-    CPU_CRITICAL_ENTER();
+    OS_CRITICAL_ENTER();
 
-    if (p_tcb == (OS_TCB *)0) {                                 /* Are we changing the priority of 'self'?              */
+    if (p_tcb == DEF_NULL) {                                    /* Are we changing the priority of 'self'?              */
         if (OSRunning != OS_STATE_OS_RUNNING) {
-            CPU_CRITICAL_EXIT();
+            OS_CRITICAL_EXIT();
            *p_err = OS_ERR_OS_NOT_RUNNING;
             return;
         }
@@ -117,7 +125,7 @@ void  OSTaskChangePrio (OS_TCB   *p_tcb,
 #if (OS_CFG_MUTEX_EN == DEF_ENABLED)
     p_tcb->BasePrio = prio_new;                                 /* Update base priority                                 */
 
-    if (p_tcb->MutexGrpHeadPtr != (OS_MUTEX *)0) {              /* Owning a mutex?                                      */
+    if (p_tcb->MutexGrpHeadPtr != DEF_NULL) {                   /* Owning a mutex?                                      */
         if (prio_new > p_tcb->Prio) {
             prio_high = OS_MutexGrpPrioFindHighest(p_tcb);
             if (prio_new > prio_high) {
@@ -129,8 +137,7 @@ void  OSTaskChangePrio (OS_TCB   *p_tcb,
 
     OS_TaskChangePrio(p_tcb, prio_new);
 
-    OS_TRACE_TASK_PRIO_CHANGE(p_tcb, prio_new);
-    CPU_CRITICAL_EXIT();
+    OS_CRITICAL_EXIT_NO_SCHED();
 
     if (OSRunning == OS_STATE_OS_RUNNING) {
         OSSched();                                              /* Run highest priority task ready                      */
@@ -208,10 +215,12 @@ void  OSTaskChangePrio (OS_TCB   *p_tcb,
 *
 *                                 OS_ERR_NONE                    If the function was successful
 *                                 OS_ERR_ILLEGAL_CREATE_RUN_TIME If you are trying to create the task after you called
-*                                                                   OSSafetyCriticalStart()
+*                                                                   OSStart()
 *                                 OS_ERR_PRIO_INVALID            If the priority you specify is higher that the maximum
 *                                                                   allowed (i.e. >= OS_CFG_PRIO_MAX-1) or,
-*                                 OS_ERR_STK_OVF                 If the stack was overflowed during stack init
+*                                                                If OS_CFG_ISR_POST_DEFERRED_EN is set to 1 and you tried
+*                                                                   to use priority 0 which is reserved
+*                                 OS_ERR_STAT_STK_SIZE_INVALID   If the stack was overflowed during stack init
 *                                 OS_ERR_STK_INVALID             If you specified a NULL pointer for 'p_stk_base'
 *                                 OS_ERR_STK_SIZE_INVALID        If you specified zero for the 'stk_size'
 *                                 OS_ERR_STK_LIMIT_INVALID       If you specified a 'stk_limit' greater than or equal
@@ -222,9 +231,9 @@ void  OSTaskChangePrio (OS_TCB   *p_tcb,
 *
 * Returns    : none
 *
-* Note(s)    : 1) OSTaskCreate() will return with the error OS_ERR_STK_OVF when a stack overflow is detected
+* Note(s)    : 1) OSTaskCreate() will return with the error OS_ERR_STAT_STK_SIZE_INVALID when a stack overflow is detected
 *                 during stack initialization. In that specific case some memory may have been corrupted. It is
-*                 therefore recommended to treat OS_ERR_STK_OVF as a fatal error.
+*                 therefore recommended to treat OS_ERR_STAT_STK_SIZE_INVALID as a fatal error.
 ************************************************************************************************************************
 */
 
@@ -257,7 +266,7 @@ void  OSTaskCreate (OS_TCB        *p_tcb,
 
 
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return;
     }
@@ -272,55 +281,84 @@ void  OSTaskCreate (OS_TCB        *p_tcb,
 
 #if (OS_CFG_CALLED_FROM_ISR_CHK_EN == DEF_ENABLED)
     if (OSIntNestingCtr > 0u) {                                 /* --------- CANNOT CREATE A TASK FROM AN ISR --------- */
-        OS_TRACE_TASK_CREATE_FAILED(p_tcb);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+        TRACE_OS_TASK_CREATE_FAILED(p_tcb);                     /* Record the event.                                    */
+#endif
        *p_err = OS_ERR_TASK_CREATE_ISR;
         return;
     }
 #endif
 
 #if (OS_CFG_ARG_CHK_EN == DEF_ENABLED)                          /* ---------------- VALIDATE ARGUMENTS ---------------- */
-    if (p_tcb == (OS_TCB *)0) {                                 /* User must supply a valid OS_TCB                      */
-        OS_TRACE_TASK_CREATE_FAILED(p_tcb);
+    if (p_tcb == DEF_NULL) {                                    /* User must supply a valid OS_TCB                      */
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+        TRACE_OS_TASK_CREATE_FAILED(p_tcb);                     /* Record the event.                                    */
+#endif
        *p_err = OS_ERR_TCB_INVALID;
         return;
     }
-    if (p_task == (OS_TASK_PTR)0u) {                            /* User must supply a valid task                        */
-        OS_TRACE_TASK_CREATE_FAILED(p_tcb);
+    if (p_task == 0u) {                                         /* User must supply a valid task                        */
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+        TRACE_OS_TASK_CREATE_FAILED(p_tcb);                     /* Record the event.                                    */
+#endif
        *p_err = OS_ERR_TASK_INVALID;
         return;
     }
-    if (p_stk_base == (CPU_STK *)0) {                           /* User must supply a valid stack base address          */
-        OS_TRACE_TASK_CREATE_FAILED(p_tcb);
+    if (p_stk_base == DEF_NULL) {                               /* User must supply a valid stack base address          */
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+        TRACE_OS_TASK_CREATE_FAILED(p_tcb);                     /* Record the event.                                    */
+#endif
        *p_err = OS_ERR_STK_INVALID;
         return;
     }
     if (stk_size < OSCfg_StkSizeMin) {                          /* User must supply a valid minimum stack size          */
-        OS_TRACE_TASK_CREATE_FAILED(p_tcb);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+        TRACE_OS_TASK_CREATE_FAILED(p_tcb);                     /* Record the event.                                    */
+#endif
        *p_err = OS_ERR_STK_SIZE_INVALID;
         return;
     }
     if (stk_limit >= stk_size) {                                /* User must supply a valid stack limit                 */
-        OS_TRACE_TASK_CREATE_FAILED(p_tcb);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+        TRACE_OS_TASK_CREATE_FAILED(p_tcb);                     /* Record the event.                                    */
+#endif
        *p_err = OS_ERR_STK_LIMIT_INVALID;
         return;
     }
-    if ((prio  > (OS_CFG_PRIO_MAX - 2u)) &&                     /* Priority must be within 0 and OS_CFG_PRIO_MAX-1      */
-        (prio != (OS_CFG_PRIO_MAX - 1u))) {
-        OS_TRACE_TASK_CREATE_FAILED(p_tcb);
+    if (prio >= OS_CFG_PRIO_MAX) {                              /* Priority must be within 0 and OS_CFG_PRIO_MAX-1      */
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+        TRACE_OS_TASK_CREATE_FAILED(p_tcb);                     /* Record the event.                                    */
+#endif
        *p_err = OS_ERR_PRIO_INVALID;
         return;
+    }
+#endif
+
+#if (OS_CFG_ISR_POST_DEFERRED_EN == DEF_ENABLED)
+    if (prio == 0u) {
+        if (p_tcb != &OSIntQTaskTCB) {
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+            TRACE_OS_TASK_CREATE_FAILED(p_tcb);                 /* Record the event.                                    */
+#endif
+           *p_err = OS_ERR_PRIO_INVALID;                        /* Not allowed to use priority 0                        */
+            return;
+        }
     }
 #endif
 
     if (prio == (OS_CFG_PRIO_MAX - 1u)) {
 #if (OS_CFG_TASK_IDLE_EN == DEF_ENABLED)
         if (p_tcb != &OSIdleTaskTCB) {
-            OS_TRACE_TASK_CREATE_FAILED(p_tcb);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+            TRACE_OS_TASK_CREATE_FAILED(p_tcb);                 /* Record the event.                                    */
+#endif
            *p_err = OS_ERR_PRIO_INVALID;                        /* Not allowed to use same priority as idle task        */
             return;
         }
 #else
-        OS_TRACE_TASK_CREATE_FAILED(p_tcb);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+        TRACE_OS_TASK_CREATE_FAILED(p_tcb);                     /* Record the event.                                    */
+#endif
        *p_err = OS_ERR_PRIO_INVALID;                            /* Not allowed to use same priority as idle task        */
         return;
 #endif
@@ -356,12 +394,12 @@ void  OSTaskCreate (OS_TCB        *p_tcb,
 
 #if (CPU_CFG_STK_GROWTH == CPU_STK_GROWTH_HI_TO_LO)             /* Check if we overflown the stack during init          */
     if (p_sp < p_stk_base) {
-       *p_err = OS_ERR_STK_OVF;
+       *p_err = OS_ERR_STAT_STK_SIZE_INVALID;
         return;
     }
 #else
-    if (p_sp > (p_stk_base + stk_size)) {
-       *p_err = OS_ERR_STK_OVF;
+    if (p_sp > p_stk_base + stk_size) {
+       *p_err = OS_ERR_STAT_STK_SIZE_INVALID;
         return;
     }
 #endif
@@ -379,7 +417,7 @@ void  OSTaskCreate (OS_TCB        *p_tcb,
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
     p_tcb->NamePtr       = p_name;                              /* Save task name                                       */
 #else
-    (void)p_name;
+    (void)&p_name;
 #endif
 
     p_tcb->Prio          = prio;                                /* Save the task's priority                             */
@@ -389,7 +427,9 @@ void  OSTaskCreate (OS_TCB        *p_tcb,
 #endif
 
     p_tcb->StkPtr        = p_sp;                                /* Save the new top-of-stack pointer                    */
+#if ((OS_CFG_DBG_EN == DEF_ENABLED) || (OS_CFG_STAT_TASK_STK_CHK_EN == DEF_ENABLED))
     p_tcb->StkLimitPtr   = p_stk_limit;                         /* Save the stack limit pointer                         */
+#endif
 
 #if (OS_CFG_SCHED_ROUND_ROBIN_EN == DEF_ENABLED)
     p_tcb->TimeQuanta    = time_quanta;                         /* Save the #ticks for time slice (0 means not sliced)  */
@@ -399,7 +439,7 @@ void  OSTaskCreate (OS_TCB        *p_tcb,
         p_tcb->TimeQuantaCtr = time_quanta;
     }
 #else
-    (void)time_quanta;
+    (void)&time_quanta;
 #endif
 
     p_tcb->ExtPtr        = p_ext;                               /* Save pointer to TCB extension                        */
@@ -419,15 +459,17 @@ void  OSTaskCreate (OS_TCB        *p_tcb,
     OS_MsgQInit(&p_tcb->MsgQ,                                   /* Initialize the task's message queue                  */
                 q_size);
 #else
-    (void)q_size;
+    (void)&q_size;
 #endif
 
     OSTaskCreateHook(p_tcb);                                    /* Call user defined hook                               */
 
-    OS_TRACE_TASK_CREATE(p_tcb);
-    OS_TRACE_TASK_SEM_CREATE(p_tcb, p_name);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+    TRACE_OS_TASK_CREATE(p_tcb);                                /* Record the event.                                    */
+    TRACE_OS_TASK_SEM_CREATE(p_tcb, p_name);                    /* Record the event.                                    */
 #if (OS_CFG_TASK_Q_EN == DEF_ENABLED)
-    OS_TRACE_TASK_MSG_Q_CREATE(&p_tcb->MsgQ, p_name);
+    TRACE_OS_TASK_MSG_Q_CREATE(&p_tcb->MsgQ, p_name);           /* Record the event.                                    */
+#endif
 #endif
 
 #if defined(OS_CFG_TLS_TBL_SIZE) && (OS_CFG_TLS_TBL_SIZE > 0u)
@@ -437,7 +479,7 @@ void  OSTaskCreate (OS_TCB        *p_tcb,
     OS_TLS_TaskCreate(p_tcb);                                   /* Call TLS hook                                        */
 #endif
                                                                 /* -------------- ADD TASK TO READY LIST -------------- */
-    CPU_CRITICAL_ENTER();
+    OS_CRITICAL_ENTER();
     OS_PrioInsert(p_tcb->Prio);
     OS_RdyListInsertTail(p_tcb);
 
@@ -448,11 +490,11 @@ void  OSTaskCreate (OS_TCB        *p_tcb,
     OSTaskQty++;                                                /* Increment the #tasks counter                         */
 
     if (OSRunning != OS_STATE_OS_RUNNING) {                     /* Return if multitasking has not started               */
-        CPU_CRITICAL_EXIT();
+        OS_CRITICAL_EXIT();
         return;
     }
 
-    CPU_CRITICAL_EXIT();
+    OS_CRITICAL_EXIT_NO_SCHED();
 
     OSSched();
 }
@@ -492,14 +534,15 @@ void  OSTaskDel (OS_TCB  *p_tcb,
                  OS_ERR  *p_err)
 {
 #if (OS_CFG_MUTEX_EN == DEF_ENABLED)
-    OS_TCB   *p_tcb_owner;
-    OS_PRIO   prio_new;
+    OS_TCB  *p_tcb_owner;
+    OS_PRIO  prio_new;
 #endif
     CPU_SR_ALLOC();
 
 
+
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return;
     }
@@ -533,13 +576,20 @@ void  OSTaskDel (OS_TCB  *p_tcb,
     }
 #endif
 
-    if (p_tcb == (OS_TCB *)0) {                                 /* Delete 'Self'?                                       */
+#if (OS_CFG_ISR_POST_DEFERRED_EN == DEF_ENABLED)
+    if (p_tcb == &OSIntQTaskTCB) {                              /* Cannot delete the ISR handler task                   */
+       *p_err = OS_ERR_TASK_DEL_INVALID;
+        return;
+    }
+#endif
+
+    if (p_tcb == DEF_NULL) {                                    /* Delete 'Self'?                                       */
         CPU_CRITICAL_ENTER();
         p_tcb  = OSTCBCurPtr;                                   /* Yes.                                                 */
         CPU_CRITICAL_EXIT();
     }
 
-    CPU_CRITICAL_ENTER();
+    OS_CRITICAL_ENTER();
     switch (p_tcb->TaskState) {
         case OS_TASK_STATE_RDY:
              OS_RdyListRemove(p_tcb);
@@ -550,7 +600,7 @@ void  OSTaskDel (OS_TCB  *p_tcb,
 
         case OS_TASK_STATE_DLY:                                 /* Task is only delayed, not on any wait list           */
         case OS_TASK_STATE_DLY_SUSPENDED:
-#if (OS_CFG_TICK_EN == DEF_ENABLED)
+#if (OS_CFG_TASK_TICK_EN == DEF_ENABLED)
              OS_TickListRemove(p_tcb);
 #endif
              break;
@@ -565,7 +615,10 @@ void  OSTaskDel (OS_TCB  *p_tcb,
                  case OS_TASK_PEND_ON_TASK_SEM:
                       break;
 
-                 case OS_TASK_PEND_ON_FLAG:                     /* Remove from pend list                                */
+                 case OS_TASK_PEND_ON_FLAG:                     /* Remove from wait list                                */
+#if (OS_CFG_PEND_MULTI_EN == DEF_ENABLED)
+                 case OS_TASK_PEND_ON_MULTI:
+#endif
                  case OS_TASK_PEND_ON_Q:
                  case OS_TASK_PEND_ON_SEM:
                       OS_PendListRemove(p_tcb);
@@ -573,28 +626,29 @@ void  OSTaskDel (OS_TCB  *p_tcb,
 
 #if (OS_CFG_MUTEX_EN == DEF_ENABLED)
                  case OS_TASK_PEND_ON_MUTEX:
-                      p_tcb_owner = ((OS_MUTEX *)((void *)p_tcb->PendObjPtr))->OwnerTCBPtr;
+                      p_tcb_owner = ((OS_MUTEX *)p_tcb->PendDataTblPtr->PendObjPtr)->OwnerTCBPtr;
                       prio_new = p_tcb_owner->Prio;
                       OS_PendListRemove(p_tcb);
                       if ((p_tcb_owner->Prio != p_tcb_owner->BasePrio) &&
                           (p_tcb_owner->Prio == p_tcb->Prio)) { /* Has the owner inherited a priority?                  */
                           prio_new = OS_MutexGrpPrioFindHighest(p_tcb_owner);
-                          prio_new = (prio_new > p_tcb_owner->BasePrio) ? p_tcb_owner->BasePrio : prio_new;
+                          prio_new = prio_new > p_tcb_owner->BasePrio ? p_tcb_owner->BasePrio : prio_new;
                       }
                       p_tcb->PendOn = OS_TASK_PEND_ON_NOTHING;
 
                       if (prio_new != p_tcb_owner->Prio) {
                           OS_TaskChangePrio(p_tcb_owner, prio_new);
-                          OS_TRACE_MUTEX_TASK_PRIO_DISINHERIT(p_tcb_owner, p_tcb_owner->Prio);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+                          TRACE_OS_MUTEX_TASK_PRIO_DISINHERIT(p_tcb_owner, p_tcb_owner->Prio);
+#endif
                       }
                       break;
 #endif
 
                  default:
-                                                                /* Default case.                                        */
                       break;
              }
-#if (OS_CFG_TICK_EN == DEF_ENABLED)
+#if (OS_CFG_TASK_TICK_EN == DEF_ENABLED)
              if ((p_tcb->TaskState == OS_TASK_STATE_PEND_TIMEOUT) ||
                  (p_tcb->TaskState == OS_TASK_STATE_PEND_TIMEOUT_SUSPENDED)) {
                  OS_TickListRemove(p_tcb);
@@ -603,13 +657,13 @@ void  OSTaskDel (OS_TCB  *p_tcb,
              break;
 
         default:
-            CPU_CRITICAL_EXIT();
+            OS_CRITICAL_EXIT();
            *p_err = OS_ERR_STATE_INVALID;
             return;
     }
 
 #if (OS_CFG_MUTEX_EN == DEF_ENABLED)
-    if(p_tcb->MutexGrpHeadPtr != (OS_MUTEX *)0) {
+    if(p_tcb->MutexGrpHeadPtr != DEF_NULL) {
         OS_MutexGrpPostAll(p_tcb);
     }
 #endif
@@ -630,15 +684,17 @@ void  OSTaskDel (OS_TCB  *p_tcb,
 
     OSTaskQty--;                                                /* One less task being managed                          */
 
-    OS_TRACE_TASK_DEL(p_tcb);
-
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+    TRACE_OS_TASK_DEL(p_tcb);                                   /* Record the event.                                    */
+#endif
 #if (OS_CFG_TASK_STK_REDZONE_EN != DEF_ENABLED)                 /* Don't clear the TCB before checking the red-zone     */
     OS_TaskInitTCB(p_tcb);                                      /* Initialize the TCB to default values                 */
 #endif
     p_tcb->TaskState = (OS_STATE)OS_TASK_STATE_DEL;             /* Indicate that the task was deleted                   */
 
+    OS_CRITICAL_EXIT_NO_SCHED();
+
    *p_err = OS_ERR_NONE;                                        /* See Note #1.                                         */
-    CPU_CRITICAL_EXIT();
 
     OSSched();                                                  /* Find new highest priority task                       */
 }
@@ -677,8 +733,9 @@ OS_MSG_QTY  OSTaskQFlush (OS_TCB  *p_tcb,
     CPU_SR_ALLOC();
 
 
+
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return (0u);
     }
@@ -698,15 +755,15 @@ OS_MSG_QTY  OSTaskQFlush (OS_TCB  *p_tcb,
     }
 #endif
 
-    if (p_tcb == (OS_TCB *)0) {                                 /* Flush message queue of calling task?                 */
+    if (p_tcb == DEF_NULL) {                                    /* Flush message queue of calling task?                 */
         CPU_CRITICAL_ENTER();
         p_tcb = OSTCBCurPtr;
         CPU_CRITICAL_EXIT();
     }
 
-    CPU_CRITICAL_ENTER();
+    OS_CRITICAL_ENTER();
     entries = OS_MsgQFreeAll(&p_tcb->MsgQ);                     /* Return all OS_MSGs to the OS_MSG pool                */
-    CPU_CRITICAL_EXIT();
+    OS_CRITICAL_EXIT();
    *p_err   = OS_ERR_NONE;
     return (entries);
 }
@@ -748,13 +805,10 @@ OS_MSG_QTY  OSTaskQFlush (OS_TCB  *p_tcb,
 *                                OS_ERR_SCHED_LOCKED       If the scheduler is locked
 *                                OS_ERR_TIMEOUT            A message was not received within the specified timeout
 *                                                          would lead to a suspension
-*                                OS_ERR_TICK_DISABLED      If kernel ticks are disabled and a timeout is specified
 *
 * Returns    : A pointer to the message received or a NULL pointer upon error.
 *
 * Note(s)    : 1) It is possible to receive NULL pointers when there are no errors.
-*
-*            : 2) This API 'MUST NOT' be called from a timer callback function.
 ************************************************************************************************************************
 */
 
@@ -765,50 +819,36 @@ void  *OSTaskQPend (OS_TICK       timeout,
                     CPU_TS       *p_ts,
                     OS_ERR       *p_err)
 {
-    OS_MSG_Q  *p_msg_q;
-    void      *p_void;
+    OS_MSG_Q     *p_msg_q;
+    void         *p_void;
     CPU_SR_ALLOC();
 
 
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
-        return ((void *)0);
-    }
-#endif
-
-    OS_TRACE_TASK_MSG_Q_PEND_ENTER(&OSTCBCurPtr->MsgQ, timeout, opt, p_msg_size, p_ts);
-
-#if (OS_CFG_TICK_EN != DEF_ENABLED)
-    if (timeout != 0u) {
-       *p_err = OS_ERR_TICK_DISABLED;
-        OS_TRACE_TASK_MSG_Q_PEND_EXIT(OS_ERR_TICK_DISABLED);
-        return ((void *)0);
+        return (DEF_NULL);
     }
 #endif
 
 #if (OS_CFG_CALLED_FROM_ISR_CHK_EN == DEF_ENABLED)
     if (OSIntNestingCtr > 0u) {                                 /* Can't Pend from an ISR                               */
-        OS_TRACE_TASK_MSG_Q_PEND_EXIT(OS_ERR_PEND_ISR);
        *p_err = OS_ERR_PEND_ISR;
-        return ((void *)0);
+        return (DEF_NULL);
     }
 #endif
 
 #if (OS_CFG_INVALID_OS_CALLS_CHK_EN == DEF_ENABLED)             /* Is the kernel running?                               */
     if (OSRunning != OS_STATE_OS_RUNNING) {
-        OS_TRACE_TASK_MSG_Q_PEND_EXIT(OS_ERR_OS_NOT_RUNNING);
        *p_err = OS_ERR_OS_NOT_RUNNING;
-        return ((void *)0);
+        return (DEF_NULL);
     }
 #endif
 
-
 #if (OS_CFG_ARG_CHK_EN == DEF_ENABLED)                          /* ---------------- VALIDATE ARGUMENTS ---------------- */
-    if (p_msg_size == (OS_MSG_SIZE *)0) {                       /* User must supply a valid destination for msg size    */
-        OS_TRACE_TASK_MSG_Q_PEND_EXIT(OS_ERR_PTR_INVALID);
+    if (p_msg_size == DEF_NULL) {                               /* User must supply a valid destination for msg size    */
        *p_err = OS_ERR_PTR_INVALID;
-        return ((void *)0);
+        return (DEF_NULL);
     }
     switch (opt) {                                              /* User must supply a valid option                      */
         case OS_OPT_PEND_BLOCKING:
@@ -816,13 +856,12 @@ void  *OSTaskQPend (OS_TICK       timeout,
              break;
 
         default:
-             OS_TRACE_TASK_MSG_Q_PEND_EXIT(OS_ERR_OPT_INVALID);
             *p_err = OS_ERR_OPT_INVALID;
-             return ((void *)0);
+             return (DEF_NULL);
     }
 #endif
 
-    if (p_ts != (CPU_TS *)0) {
+    if (p_ts != DEF_NULL) {
        *p_ts = 0u;                                              /* Initialize the returned timestamp                    */
     }
 
@@ -835,7 +874,7 @@ void  *OSTaskQPend (OS_TICK       timeout,
     if (*p_err == OS_ERR_NONE) {
 #if (OS_CFG_TASK_PROFILE_EN == DEF_ENABLED)
 #if (OS_CFG_TS_EN == DEF_ENABLED)
-        if (p_ts != (CPU_TS *)0) {
+        if (p_ts != DEF_NULL) {
             OSTCBCurPtr->MsgQPendTime = OS_TS_GET() - *p_ts;
             if (OSTCBCurPtr->MsgQPendTimeMax < OSTCBCurPtr->MsgQPendTime) {
                 OSTCBCurPtr->MsgQPendTimeMax = OSTCBCurPtr->MsgQPendTime;
@@ -843,34 +882,40 @@ void  *OSTaskQPend (OS_TICK       timeout,
         }
 #endif
 #endif
-        OS_TRACE_TASK_MSG_Q_PEND(p_msg_q);
         CPU_CRITICAL_EXIT();
-        OS_TRACE_TASK_MSG_Q_PEND_EXIT(OS_ERR_NONE);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+        TRACE_OS_TASK_MSG_Q_PEND(p_msg_q);                      /* Record the event.                                    */
+#endif
         return (p_void);                                        /* Yes, Return oldest message received                  */
     }
 
     if ((opt & OS_OPT_PEND_NON_BLOCKING) != 0u) {               /* Caller wants to block if not available?              */
        *p_err = OS_ERR_PEND_WOULD_BLOCK;                        /* No                                                   */
         CPU_CRITICAL_EXIT();
-        OS_TRACE_TASK_MSG_Q_PEND_FAILED(p_msg_q);
-        OS_TRACE_TASK_MSG_Q_PEND_EXIT(OS_ERR_PEND_WOULD_BLOCK);
-        return ((void *)0);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+        TRACE_OS_TASK_MSG_Q_PEND_FAILED(p_msg_q);               /* Record the event.                                    */
+#endif
+        return (DEF_NULL);
     } else {                                                    /* Yes                                                  */
         if (OSSchedLockNestingCtr > 0u) {                       /* Can't block when the scheduler is locked             */
             CPU_CRITICAL_EXIT();
-            OS_TRACE_TASK_MSG_Q_PEND_FAILED(p_msg_q);
-            OS_TRACE_TASK_MSG_Q_PEND_EXIT(OS_ERR_SCHED_LOCKED);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+            TRACE_OS_TASK_MSG_Q_PEND_FAILED(p_msg_q);           /* Record the event.                                    */
+#endif
            *p_err = OS_ERR_SCHED_LOCKED;
-            return ((void *)0);
+            return (DEF_NULL);
         }
     }
-
-    OS_Pend((OS_PEND_OBJ *)0,                                   /* Block task pending on Message                        */
-             OSTCBCurPtr,
-             OS_TASK_PEND_ON_TASK_Q,
-             timeout);
-    CPU_CRITICAL_EXIT();
-    OS_TRACE_TASK_MSG_Q_PEND_BLOCK(p_msg_q);
+                                                                /* Lock the scheduler/re-enable interrupts              */
+    OS_CRITICAL_ENTER_CPU_EXIT();
+    OS_Pend(DEF_NULL,                                           /* Block task pending on Message                        */
+            DEF_NULL,
+            OS_TASK_PEND_ON_TASK_Q,
+            timeout);
+    OS_CRITICAL_EXIT_NO_SCHED();
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+    TRACE_OS_TASK_MSG_Q_PEND_BLOCK(p_msg_q);                    /* Record the event.                                    */
+#endif
     OSSched();                                                  /* Find the next highest priority task ready to run     */
 
     CPU_CRITICAL_ENTER();
@@ -879,7 +924,7 @@ void  *OSTaskQPend (OS_TICK       timeout,
              p_void      = OSTCBCurPtr->MsgPtr;
             *p_msg_size  = OSTCBCurPtr->MsgSize;
 #if (OS_CFG_TS_EN == DEF_ENABLED)
-             if (p_ts != (CPU_TS *)0) {
+             if (p_ts != DEF_NULL) {
                 *p_ts = OSTCBCurPtr->TS;
 #if (OS_CFG_TASK_PROFILE_EN == DEF_ENABLED)
                 OSTCBCurPtr->MsgQPendTime = OS_TS_GET() - OSTCBCurPtr->TS;
@@ -889,35 +934,40 @@ void  *OSTaskQPend (OS_TICK       timeout,
 #endif
              }
 #endif
-             OS_TRACE_TASK_MSG_Q_PEND(p_msg_q);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+             TRACE_OS_TASK_MSG_Q_PEND(p_msg_q);                 /* Record the event.                                    */
+#endif
             *p_err = OS_ERR_NONE;
              break;
 
         case OS_STATUS_PEND_ABORT:                              /* Indicate that we aborted                             */
-             p_void     = (void *)0;
+             p_void     = DEF_NULL;
             *p_msg_size = 0u;
-             if (p_ts != (CPU_TS *)0) {
+             if (p_ts != DEF_NULL) {
                 *p_ts = 0u;
              }
-             OS_TRACE_TASK_MSG_Q_PEND_FAILED(p_msg_q);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+             TRACE_OS_TASK_MSG_Q_PEND_FAILED(p_msg_q);          /* Record the event.                                    */
+#endif
             *p_err      =  OS_ERR_PEND_ABORT;
              break;
 
         case OS_STATUS_PEND_TIMEOUT:                            /* Indicate that we didn't get event within TO          */
         default:
-             p_void     = (void *)0;
+             p_void     = DEF_NULL;
             *p_msg_size = 0u;
 #if (OS_CFG_TS_EN == DEF_ENABLED)
-             if (p_ts  != (CPU_TS *)0) {
+             if (p_ts  != DEF_NULL) {
                 *p_ts = OSTCBCurPtr->TS;
              }
 #endif
-             OS_TRACE_TASK_MSG_Q_PEND_FAILED(p_msg_q);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+             TRACE_OS_TASK_MSG_Q_PEND_FAILED(p_msg_q);          /* Record the event.                                    */
+#endif
             *p_err      =  OS_ERR_TIMEOUT;
              break;
     }
     CPU_CRITICAL_EXIT();
-    OS_TRACE_TASK_MSG_Q_PEND_EXIT(*p_err);
     return (p_void);                                            /* Return received message                              */
 }
 #endif
@@ -959,12 +1009,13 @@ CPU_BOOLEAN  OSTaskQPendAbort (OS_TCB  *p_tcb,
                                OS_OPT   opt,
                                OS_ERR  *p_err)
 {
-    CPU_TS  ts;
+    CPU_TS         ts;
     CPU_SR_ALLOC();
 
 
+
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return (DEF_FALSE);
     }
@@ -998,7 +1049,7 @@ CPU_BOOLEAN  OSTaskQPendAbort (OS_TCB  *p_tcb,
 
     CPU_CRITICAL_ENTER();
 #if (OS_CFG_ARG_CHK_EN == DEF_ENABLED)
-    if ((p_tcb == (OS_TCB *)0) ||                               /* Pend abort self?                                     */
+    if ((p_tcb == DEF_NULL) ||                                  /* Pend abort self?                                     */
         (p_tcb == OSTCBCurPtr)) {
         CPU_CRITICAL_EXIT();
        *p_err = OS_ERR_PEND_ABORT_SELF;                         /* ... doesn't make sense                               */
@@ -1012,15 +1063,16 @@ CPU_BOOLEAN  OSTaskQPendAbort (OS_TCB  *p_tcb,
         return (DEF_FALSE);
     }
 
+    OS_CRITICAL_ENTER_CPU_EXIT();
 #if (OS_CFG_TS_EN == DEF_ENABLED)
     ts = OS_TS_GET();                                           /* Get timestamp of when the abort occurred             */
 #else
     ts = 0u;
 #endif
-    OS_PendAbort(p_tcb,                                         /* Abort the pend                                       */
-                 ts,
-                 OS_STATUS_PEND_ABORT);
-    CPU_CRITICAL_EXIT();
+    OS_PendAbort(DEF_NULL,                                      /* Abort the pend                                       */
+                 p_tcb,
+                 ts);
+    OS_CRITICAL_EXIT_NO_SCHED();
     if ((opt & OS_OPT_POST_NO_SCHED) == 0u) {
         OSSched();                                              /* Run the scheduler                                    */
     }
@@ -1058,6 +1110,7 @@ CPU_BOOLEAN  OSTaskQPendAbort (OS_TCB  *p_tcb,
 *                         with the outcome of this call.  Errors can be:
 *
 *                             OS_ERR_NONE              The call was successful and the message was sent
+*                             OS_ERR_INT_Q_FULL        If the deferred interrupt post queue is full
 *                             OS_ERR_MSG_POOL_EMPTY    If there are no more OS_MSGs available from the pool
 *                             OS_ERR_OPT_INVALID       If you specified an invalid option
 *                             OS_ERR_OS_NOT_RUNNING    If uC/OS-III is not running yet
@@ -1078,22 +1131,19 @@ void  OSTaskQPost (OS_TCB       *p_tcb,
                    OS_OPT        opt,
                    OS_ERR       *p_err)
 {
-    CPU_TS  ts;
-    CPU_SR_ALLOC();
+    CPU_TS   ts;
+
 
 
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return;
     }
 #endif
 
-    OS_TRACE_TASK_MSG_Q_POST_ENTER(&p_tcb->MsgQ, p_void, msg_size, opt);
-
 #if (OS_CFG_INVALID_OS_CALLS_CHK_EN == DEF_ENABLED)             /* Is the kernel running?                               */
     if (OSRunning != OS_STATE_OS_RUNNING) {
-        OS_TRACE_TASK_MSG_Q_POST_EXIT(OS_ERR_OS_NOT_RUNNING);
        *p_err = OS_ERR_OS_NOT_RUNNING;
         return;
     }
@@ -1108,8 +1158,9 @@ void  OSTaskQPost (OS_TCB       *p_tcb,
              break;
 
         default:
-             OS_TRACE_TASK_MSG_Q_POST_FAILED(&p_tcb->MsgQ);
-             OS_TRACE_TASK_MSG_Q_POST_EXIT(OS_ERR_OPT_INVALID);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+             TRACE_OS_TASK_MSG_Q_POST_FAILED(&p_tcb->MsgQ);     /* Record the event.                                    */
+#endif
             *p_err = OS_ERR_OPT_INVALID;
              return;
     }
@@ -1121,59 +1172,30 @@ void  OSTaskQPost (OS_TCB       *p_tcb,
     ts = 0u;
 #endif
 
-    OS_TRACE_TASK_MSG_Q_POST(&p_tcb->MsgQ);
-
-   *p_err = OS_ERR_NONE;                                        /* Assume we won't have any errors                      */
-    CPU_CRITICAL_ENTER();
-    if (p_tcb == (OS_TCB *)0) {                                 /* Post msg to 'self'?                                  */
-        p_tcb = OSTCBCurPtr;
+#if (OS_CFG_ISR_POST_DEFERRED_EN == DEF_ENABLED)
+    if (OSIntNestingCtr > 0u) {
+        OS_IntQPost(OS_OBJ_TYPE_TASK_MSG,                       /* Post to ISR queue                                    */
+                    p_tcb,
+                    p_void,
+                    msg_size,
+                    0u,
+                    opt,
+                    ts,
+                    p_err);
+        return;
     }
-    switch (p_tcb->TaskState) {
-        case OS_TASK_STATE_RDY:
-        case OS_TASK_STATE_DLY:
-        case OS_TASK_STATE_SUSPENDED:
-        case OS_TASK_STATE_DLY_SUSPENDED:
-             OS_MsgQPut(&p_tcb->MsgQ,                           /* Deposit the message in the queue                     */
-                        p_void,
-                        msg_size,
-                        opt,
-                        ts,
-                        p_err);
-             CPU_CRITICAL_EXIT();
-             break;
+#endif
 
-        case OS_TASK_STATE_PEND:
-        case OS_TASK_STATE_PEND_TIMEOUT:
-        case OS_TASK_STATE_PEND_SUSPENDED:
-        case OS_TASK_STATE_PEND_TIMEOUT_SUSPENDED:
-             if (p_tcb->PendOn == OS_TASK_PEND_ON_TASK_Q) {     /* Is task waiting for a message to be sent to it?      */
-                 OS_Post((OS_PEND_OBJ *)0,
-                          p_tcb,
-                          p_void,
-                          msg_size,
-                          ts);
-                 CPU_CRITICAL_EXIT();
-                 if ((opt & OS_OPT_POST_NO_SCHED) == 0u) {
-                     OSSched();                                 /* Run the scheduler                                    */
-                 }
-             } else {
-                 OS_MsgQPut(&p_tcb->MsgQ,                       /* No,  Task is pending on something else ...           */
-                            p_void,                             /* ... Deposit the message in the task's queue          */
-                            msg_size,
-                            opt,
-                            ts,
-                            p_err);
-                 CPU_CRITICAL_EXIT();
-             }
-             break;
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+    TRACE_OS_TASK_MSG_Q_POST(&p_tcb->MsgQ);                     /* Record the event.                                    */
+#endif
 
-        default:
-             CPU_CRITICAL_EXIT();
-            *p_err = OS_ERR_STATE_INVALID;
-             break;
-    }
-
-    OS_TRACE_TASK_MSG_Q_POST_EXIT(*p_err);
+    OS_TaskQPost(p_tcb,
+                 p_void,
+                 msg_size,
+                 opt,
+                 ts,
+                 p_err);
 }
 #endif
 
@@ -1214,7 +1236,7 @@ OS_REG  OSTaskRegGet (OS_TCB     *p_tcb,
 
 
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return (0u);
     }
@@ -1228,7 +1250,7 @@ OS_REG  OSTaskRegGet (OS_TCB     *p_tcb,
 #endif
 
     CPU_CRITICAL_ENTER();
-    if (p_tcb == (OS_TCB *)0) {
+    if (p_tcb == DEF_NULL) {
         p_tcb = OSTCBCurPtr;
     }
     value = p_tcb->RegTbl[id];
@@ -1267,7 +1289,7 @@ OS_REG_ID  OSTaskRegGetID (OS_ERR  *p_err)
 
 
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return ((OS_REG_ID)OS_CFG_TASK_REG_TBL_SIZE);
     }
@@ -1280,7 +1302,7 @@ OS_REG_ID  OSTaskRegGetID (OS_ERR  *p_err)
         return (OS_CFG_TASK_REG_TBL_SIZE);
     }
 
-    id = OSTaskRegNextAvailID;                                  /* Assign the next available ID                         */
+    id    = OSTaskRegNextAvailID;                               /* Assign the next available ID                         */
     OSTaskRegNextAvailID++;                                     /* Increment available ID for next request              */
     CPU_CRITICAL_EXIT();
    *p_err = OS_ERR_NONE;
@@ -1327,7 +1349,7 @@ void  OSTaskRegSet (OS_TCB     *p_tcb,
 
 
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return;
     }
@@ -1341,7 +1363,7 @@ void  OSTaskRegSet (OS_TCB     *p_tcb,
 #endif
 
     CPU_CRITICAL_ENTER();
-    if (p_tcb == (OS_TCB *)0) {
+    if (p_tcb == DEF_NULL) {
         p_tcb = OSTCBCurPtr;
     }
     p_tcb->RegTbl[id] = value;
@@ -1363,6 +1385,7 @@ void  OSTaskRegSet (OS_TCB     *p_tcb,
 *              p_err      Is a pointer to a variable that will contain an error code returned by this function
 *
 *                             OS_ERR_NONE                  If the requested task is resumed
+*                             OS_ERR_INT_Q_FULL            If the deferred interrupt post queue is full
 *                             OS_ERR_OS_NOT_RUNNING        If uC/OS-III is not running yet
 *                             OS_ERR_STATE_INVALID         If the task is in an invalid state
 *                             OS_ERR_TASK_NOT_SUSPENDED    If the task to resume has not been suspended
@@ -1382,14 +1405,16 @@ void  OSTaskResume (OS_TCB  *p_tcb,
     CPU_SR_ALLOC();
 
 
+
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return;
     }
 #endif
 
-#if (OS_CFG_CALLED_FROM_ISR_CHK_EN == DEF_ENABLED)
+#if (OS_CFG_ISR_POST_DEFERRED_EN   == DEF_DISABLED) && \
+    (OS_CFG_CALLED_FROM_ISR_CHK_EN == DEF_ENABLED)
     if (OSIntNestingCtr > 0u) {                                 /* Not allowed to call from an ISR                      */
        *p_err = OS_ERR_TASK_RESUME_ISR;
         return;
@@ -1404,69 +1429,36 @@ void  OSTaskResume (OS_TCB  *p_tcb,
 #endif
 
 
-#if (OS_CFG_ARG_CHK_EN == DEF_ENABLED)
     CPU_CRITICAL_ENTER();
-    if ((p_tcb == (OS_TCB *)0) ||                               /* We cannot resume 'self'                              */
+#if (OS_CFG_ARG_CHK_EN == DEF_ENABLED)
+    if ((p_tcb == DEF_NULL) ||                                  /* We cannot resume 'self'                              */
         (p_tcb == OSTCBCurPtr)) {
         CPU_CRITICAL_EXIT();
        *p_err  = OS_ERR_TASK_RESUME_SELF;
         return;
     }
+#endif
     CPU_CRITICAL_EXIT();
+
+#if (OS_CFG_ISR_POST_DEFERRED_EN == DEF_ENABLED)
+    if (OSIntNestingCtr > 0u) {                                 /* See if called from an ISR                            */
+        OS_IntQPost(OS_OBJ_TYPE_TASK_RESUME,                    /* Post to ISR queue                                    */
+                    (void *)p_tcb,
+                    DEF_NULL,
+                    0u,
+                    0u,
+                    0u,
+                    0u,
+                    p_err);
+        return;
+    }
 #endif
 
-    CPU_CRITICAL_ENTER();
-   *p_err  = OS_ERR_NONE;
-    switch (p_tcb->TaskState) {
-        case OS_TASK_STATE_RDY:
-        case OS_TASK_STATE_DLY:
-        case OS_TASK_STATE_PEND:
-        case OS_TASK_STATE_PEND_TIMEOUT:
-             CPU_CRITICAL_EXIT();
-            *p_err = OS_ERR_TASK_NOT_SUSPENDED;
-             break;
+    OS_TaskResume(p_tcb, p_err);
 
-        case OS_TASK_STATE_SUSPENDED:
-             p_tcb->SuspendCtr--;
-             if (p_tcb->SuspendCtr == 0u) {
-                 p_tcb->TaskState = OS_TASK_STATE_RDY;
-                 OS_RdyListInsert(p_tcb);                       /* Insert the task in the ready list                    */
-             }
-             CPU_CRITICAL_EXIT();
-             break;
-
-        case OS_TASK_STATE_DLY_SUSPENDED:
-             p_tcb->SuspendCtr--;
-             if (p_tcb->SuspendCtr == 0u) {
-                 p_tcb->TaskState = OS_TASK_STATE_DLY;
-             }
-             CPU_CRITICAL_EXIT();
-             break;
-
-        case OS_TASK_STATE_PEND_SUSPENDED:
-             p_tcb->SuspendCtr--;
-             if (p_tcb->SuspendCtr == 0u) {
-                 p_tcb->TaskState = OS_TASK_STATE_PEND;
-             }
-             CPU_CRITICAL_EXIT();
-             break;
-
-        case OS_TASK_STATE_PEND_TIMEOUT_SUSPENDED:
-             p_tcb->SuspendCtr--;
-             if (p_tcb->SuspendCtr == 0u) {
-                 p_tcb->TaskState = OS_TASK_STATE_PEND_TIMEOUT;
-             }
-             CPU_CRITICAL_EXIT();
-             break;
-
-        default:
-             CPU_CRITICAL_EXIT();
-            *p_err = OS_ERR_STATE_INVALID;
-             return;
-    }
-
-    OS_TRACE_TASK_RESUME(p_tcb);
-    OSSched();
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+    TRACE_OS_TASK_RESUME(p_tcb);                                /* Record the event.                                    */
+#endif
 }
 #endif
 
@@ -1503,7 +1495,7 @@ void  OSTaskResume (OS_TCB  *p_tcb,
 *
 * Returns    : The current count of signals the task received, 0 if none.
 *
-* Note(s)    : This API 'MUST NOT' be called from a timer callback function.
+* Note(s)    : none
 ************************************************************************************************************************
 */
 
@@ -1517,31 +1509,21 @@ OS_SEM_CTR  OSTaskSemPend (OS_TICK   timeout,
 
 
 #if (OS_CFG_TS_EN == DEF_DISABLED)
-    (void)p_ts;                                                 /* Prevent compiler warning for not using 'ts'          */
+    (void)&p_ts;                                                /* Prevent compiler warning for not using 'ts'          */
 #endif
 
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
-        return (0u);
-    }
-#endif
-
-    OS_TRACE_TASK_SEM_PEND_ENTER(OSTCBCurPtr, timeout, opt, p_ts);
-
-#if (OS_CFG_TICK_EN != DEF_ENABLED)
-    if (timeout != 0u) {
-        OS_TRACE_TASK_SEM_PEND_FAILED(OSTCBCurPtr);
-        OS_TRACE_TASK_SEM_PEND_EXIT(OS_ERR_TICK_DISABLED);
-       *p_err = OS_ERR_TICK_DISABLED;
         return (0u);
     }
 #endif
 
 #if (OS_CFG_CALLED_FROM_ISR_CHK_EN == DEF_ENABLED)
     if (OSIntNestingCtr > 0u) {                                 /* Not allowed to call from an ISR                      */
-        OS_TRACE_TASK_SEM_PEND_FAILED(OSTCBCurPtr);
-        OS_TRACE_TASK_SEM_PEND_EXIT(OS_ERR_PEND_ISR);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+        TRACE_OS_TASK_SEM_PEND_FAILED(OSTCBCurPtr);             /* Record the event.                                    */
+#endif
        *p_err = OS_ERR_PEND_ISR;
         return (0u);
     }
@@ -1549,7 +1531,6 @@ OS_SEM_CTR  OSTaskSemPend (OS_TICK   timeout,
 
 #if (OS_CFG_INVALID_OS_CALLS_CHK_EN == DEF_ENABLED)             /* Is the kernel running?                               */
     if (OSRunning != OS_STATE_OS_RUNNING) {
-        OS_TRACE_TASK_SEM_PEND_EXIT(OS_ERR_OS_NOT_RUNNING);
        *p_err = OS_ERR_OS_NOT_RUNNING;
         return (0u);
     }
@@ -1562,8 +1543,9 @@ OS_SEM_CTR  OSTaskSemPend (OS_TICK   timeout,
              break;
 
         default:
-             OS_TRACE_TASK_SEM_PEND_FAILED(OSTCBCurPtr);
-             OS_TRACE_TASK_SEM_PEND_EXIT(OS_ERR_OPT_INVALID);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+             TRACE_OS_TASK_SEM_PEND_FAILED(OSTCBCurPtr);        /* Record the event.                                    */
+#endif
             *p_err = OS_ERR_OPT_INVALID;
              return (0u);
     }
@@ -1574,7 +1556,7 @@ OS_SEM_CTR  OSTaskSemPend (OS_TICK   timeout,
         OSTCBCurPtr->SemCtr--;
         ctr = OSTCBCurPtr->SemCtr;
 #if (OS_CFG_TS_EN == DEF_ENABLED)
-        if (p_ts != (CPU_TS *)0) {
+        if (p_ts != DEF_NULL) {
            *p_ts  = OSTCBCurPtr->TS;
         }
 #if (OS_CFG_TASK_PROFILE_EN == DEF_ENABLED)
@@ -1586,9 +1568,10 @@ OS_SEM_CTR  OSTaskSemPend (OS_TICK   timeout,
 #endif
 #endif
 #endif
-        OS_TRACE_TASK_SEM_PEND(OSTCBCurPtr);
         CPU_CRITICAL_EXIT();
-        OS_TRACE_TASK_SEM_PEND_EXIT(OS_ERR_NONE);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+        TRACE_OS_TASK_SEM_PEND(OSTCBCurPtr);                    /* Record the event.                                    */
+#endif
        *p_err = OS_ERR_NONE;
         return (ctr);
     }
@@ -1596,42 +1579,47 @@ OS_SEM_CTR  OSTaskSemPend (OS_TICK   timeout,
     if ((opt & OS_OPT_PEND_NON_BLOCKING) != 0u) {               /* Caller wants to block if not available?              */
         CPU_CRITICAL_EXIT();
 #if (OS_CFG_TS_EN == DEF_ENABLED)
-        if (p_ts != (CPU_TS *)0) {
+        if (p_ts != DEF_NULL) {
             *p_ts  = 0u;
         }
 #endif
-        OS_TRACE_TASK_SEM_PEND_FAILED(OSTCBCurPtr);
-        OS_TRACE_TASK_SEM_PEND_EXIT(OS_ERR_PEND_WOULD_BLOCK);
        *p_err = OS_ERR_PEND_WOULD_BLOCK;                        /* No                                                   */
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+        TRACE_OS_TASK_SEM_PEND_FAILED(OSTCBCurPtr);             /* Record the event.                                    */
+#endif
         return (0u);
     } else {                                                    /* Yes                                                  */
         if (OSSchedLockNestingCtr > 0u) {                       /* Can't pend when the scheduler is locked              */
 #if (OS_CFG_TS_EN == DEF_ENABLED)
-            if (p_ts != (CPU_TS *)0) {
+            if (p_ts != DEF_NULL) {
                *p_ts  = 0u;
             }
 #endif
             CPU_CRITICAL_EXIT();
-            OS_TRACE_TASK_SEM_PEND_FAILED(OSTCBCurPtr);
-            OS_TRACE_TASK_SEM_PEND_EXIT(OS_ERR_SCHED_LOCKED);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+            TRACE_OS_TASK_SEM_PEND_FAILED(OSTCBCurPtr);         /* Record the event.                                    */
+#endif
            *p_err = OS_ERR_SCHED_LOCKED;
             return (0u);
         }
     }
-
-    OS_Pend((OS_PEND_OBJ *)0,                                   /* Block task pending on Signal                         */
-             OSTCBCurPtr,
-             OS_TASK_PEND_ON_TASK_SEM,
-             timeout);
-    CPU_CRITICAL_EXIT();
-    OS_TRACE_TASK_SEM_PEND_BLOCK(OSTCBCurPtr);
+                                                                /* Lock the scheduler/re-enable interrupts              */
+    OS_CRITICAL_ENTER_CPU_EXIT();
+    OS_Pend(DEF_NULL,                                           /* Block task pending on Signal                         */
+            DEF_NULL,
+            OS_TASK_PEND_ON_TASK_SEM,
+            timeout);
+    OS_CRITICAL_EXIT_NO_SCHED();
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+    TRACE_OS_TASK_SEM_PEND_BLOCK(OSTCBCurPtr);                  /* Record the event.                                    */
+#endif
     OSSched();                                                  /* Find next highest priority task ready to run         */
 
     CPU_CRITICAL_ENTER();
     switch (OSTCBCurPtr->PendStatus) {                          /* See if we timed-out or aborted                       */
         case OS_STATUS_PEND_OK:
 #if (OS_CFG_TS_EN == DEF_ENABLED)
-             if (p_ts != (CPU_TS *)0) {
+             if (p_ts != DEF_NULL) {
                 *p_ts                    =  OSTCBCurPtr->TS;
 #if (OS_CFG_TASK_PROFILE_EN == DEF_ENABLED)
 #if (OS_CFG_TS_EN == DEF_ENABLED)
@@ -1643,38 +1631,45 @@ OS_SEM_CTR  OSTaskSemPend (OS_TICK   timeout,
 #endif
              }
 #endif
-             OS_TRACE_TASK_SEM_PEND(OSTCBCurPtr);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+             TRACE_OS_TASK_SEM_PEND(OSTCBCurPtr);               /* Record the event.                                    */
+#endif
             *p_err = OS_ERR_NONE;
              break;
 
         case OS_STATUS_PEND_ABORT:
 #if (OS_CFG_TS_EN == DEF_ENABLED)
-             if (p_ts != (CPU_TS *)0) {
+             if (p_ts != DEF_NULL) {
                 *p_ts = OSTCBCurPtr->TS;
              }
 #endif
-             OS_TRACE_TASK_SEM_PEND_FAILED(OSTCBCurPtr);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+             TRACE_OS_TASK_SEM_PEND_FAILED(OSTCBCurPtr);        /* Record the event.                                    */
+#endif
             *p_err = OS_ERR_PEND_ABORT;                         /* Indicate that we aborted                             */
              break;
 
         case OS_STATUS_PEND_TIMEOUT:
 #if (OS_CFG_TS_EN == DEF_ENABLED)
-             if (p_ts != (CPU_TS *)0) {
+             if (p_ts != DEF_NULL) {
                 *p_ts = 0u;
              }
 #endif
-             OS_TRACE_TASK_SEM_PEND_FAILED(OSTCBCurPtr);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+             TRACE_OS_TASK_SEM_PEND_FAILED(OSTCBCurPtr);        /* Record the event.                                    */
+#endif
             *p_err = OS_ERR_TIMEOUT;                            /* Indicate that we didn't get event within TO          */
              break;
 
         default:
-             OS_TRACE_TASK_SEM_PEND_FAILED(OSTCBCurPtr);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+             TRACE_OS_TASK_SEM_PEND_FAILED(OSTCBCurPtr);        /* Record the event.                                    */
+#endif
             *p_err = OS_ERR_STATUS_INVALID;
              break;
     }
     ctr = OSTCBCurPtr->SemCtr;
     CPU_CRITICAL_EXIT();
-    OS_TRACE_TASK_SEM_PEND_EXIT(*p_err);
     return (ctr);
 }
 
@@ -1722,7 +1717,7 @@ CPU_BOOLEAN  OSTaskSemPendAbort (OS_TCB  *p_tcb,
 
 
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return (DEF_FALSE);
     }
@@ -1755,7 +1750,7 @@ CPU_BOOLEAN  OSTaskSemPendAbort (OS_TCB  *p_tcb,
 #endif
 
     CPU_CRITICAL_ENTER();
-    if ((p_tcb == (OS_TCB *)0) ||                               /* Pend abort self?                                     */
+    if ((p_tcb == DEF_NULL) ||                                  /* Pend abort self?                                     */
         (p_tcb == OSTCBCurPtr)) {
         CPU_CRITICAL_EXIT();                                    /* ... doesn't make sense!                              */
        *p_err = OS_ERR_PEND_ABORT_SELF;
@@ -1769,16 +1764,16 @@ CPU_BOOLEAN  OSTaskSemPendAbort (OS_TCB  *p_tcb,
     }
     CPU_CRITICAL_EXIT();
 
-    CPU_CRITICAL_ENTER();
+    OS_CRITICAL_ENTER();
 #if (OS_CFG_TS_EN == DEF_ENABLED)
     ts = OS_TS_GET();
 #else
     ts = 0u;
 #endif
-    OS_PendAbort(p_tcb,                                         /* Abort the pend                                       */
-                 ts,
-                 OS_STATUS_PEND_ABORT);
-    CPU_CRITICAL_EXIT();
+    OS_PendAbort(DEF_NULL,
+                 p_tcb,
+                 ts);
+    OS_CRITICAL_EXIT_NO_SCHED();
     if ((opt & OS_OPT_POST_NO_SCHED) == 0u) {
         OSSched();                                              /* Run the scheduler                                    */
     }
@@ -1805,6 +1800,7 @@ CPU_BOOLEAN  OSTaskSemPendAbort (OS_TCB  *p_tcb,
 *              p_err     is a pointer to an error code returned by this function:
 *
 *                            OS_ERR_NONE              If the requested task is signaled
+*                            OS_ERR_INT_Q_FULL        If the deferred interrupt post queue is full
 *                            OS_ERR_OPT_INVALID       If you specified an invalid option
 *                            OS_ERR_OS_NOT_RUNNING    If uC/OS-III is not running yet
 *                            OS_ERR_SEM_OVF           If the post would cause the semaphore count to overflow
@@ -1823,21 +1819,18 @@ OS_SEM_CTR  OSTaskSemPost (OS_TCB  *p_tcb,
 {
     OS_SEM_CTR  ctr;
     CPU_TS      ts;
-    CPU_SR_ALLOC();
+
 
 
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return (0u);
     }
 #endif
 
-    OS_TRACE_TASK_SEM_POST_ENTER(p_tcb, opt);
-
 #if (OS_CFG_INVALID_OS_CALLS_CHK_EN == DEF_ENABLED)             /* Is the kernel running?                               */
     if (OSRunning != OS_STATE_OS_RUNNING) {
-        OS_TRACE_TASK_SEM_POST_EXIT(OS_ERR_OS_NOT_RUNNING);
        *p_err = OS_ERR_OS_NOT_RUNNING;
         return (0u);
     }
@@ -1850,8 +1843,9 @@ OS_SEM_CTR  OSTaskSemPost (OS_TCB  *p_tcb,
              break;
 
         default:
-             OS_TRACE_TASK_SEM_POST_FAILED(p_tcb);
-             OS_TRACE_TASK_SEM_POST_EXIT(OS_ERR_OPT_INVALID);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+             TRACE_OS_TASK_SEM_POST_FAILED(p_tcb);              /* Record the event.                                    */
+#endif
             *p_err =  OS_ERR_OPT_INVALID;
              return (0u);
     }
@@ -1863,68 +1857,28 @@ OS_SEM_CTR  OSTaskSemPost (OS_TCB  *p_tcb,
     ts = 0u;
 #endif
 
-    OS_TRACE_TASK_SEM_POST(p_tcb);
-
-    CPU_CRITICAL_ENTER();
-    if (p_tcb == (OS_TCB *)0) {                                 /* Post signal to 'self'?                               */
-        p_tcb = OSTCBCurPtr;
+#if (OS_CFG_ISR_POST_DEFERRED_EN == DEF_ENABLED)
+    if (OSIntNestingCtr > 0u) {                                 /* See if called from an ISR                            */
+        OS_IntQPost(OS_OBJ_TYPE_TASK_SIGNAL,                    /* Post to ISR queue                                    */
+                    (void      *)p_tcb,
+                    DEF_NULL,
+                    0u,
+                    0u,
+                    0u,
+                    ts,
+                    p_err);
+        return (0u);
     }
-#if (OS_CFG_TS_EN == DEF_ENABLED)
-    p_tcb->TS = ts;
 #endif
-   *p_err     = OS_ERR_NONE;                                    /* Assume we won't have any errors                      */
-    switch (p_tcb->TaskState) {
-        case OS_TASK_STATE_RDY:
-        case OS_TASK_STATE_DLY:
-        case OS_TASK_STATE_SUSPENDED:
-        case OS_TASK_STATE_DLY_SUSPENDED:
-             if (p_tcb->SemCtr == (OS_SEM_CTR)-1) {
-                 CPU_CRITICAL_EXIT();
-                *p_err = OS_ERR_SEM_OVF;
-                 OS_TRACE_SEM_POST_EXIT(*p_err);
-                 return (0u);
-             }
-             p_tcb->SemCtr++;                                   /* Task signaled is not pending on anything             */
-             ctr = p_tcb->SemCtr;
-             CPU_CRITICAL_EXIT();
-             break;
 
-        case OS_TASK_STATE_PEND:
-        case OS_TASK_STATE_PEND_TIMEOUT:
-        case OS_TASK_STATE_PEND_SUSPENDED:
-        case OS_TASK_STATE_PEND_TIMEOUT_SUSPENDED:
-             if (p_tcb->PendOn == OS_TASK_PEND_ON_TASK_SEM) {   /* Is task signaled waiting for a signal?               */
-                 OS_Post((OS_PEND_OBJ *)0,                      /* Task is pending on signal                            */
-                          p_tcb,
-                          (void *)0,
-                          0u,
-                          ts);
-                 ctr = p_tcb->SemCtr;
-                 CPU_CRITICAL_EXIT();
-                 if ((opt & OS_OPT_POST_NO_SCHED) == 0u) {
-                     OSSched();                                 /* Run the scheduler                                    */
-                 }
-             } else {
-                 if (p_tcb->SemCtr == (OS_SEM_CTR)-1) {
-                     CPU_CRITICAL_EXIT();
-                    *p_err = OS_ERR_SEM_OVF;
-                     OS_TRACE_SEM_POST_EXIT(*p_err);
-                     return (0u);
-                 }
-                 p_tcb->SemCtr++;                               /* No,  Task signaled is NOT pending on semaphore ...   */
-                 ctr = p_tcb->SemCtr;                           /* ... it must be waiting on something else             */
-                 CPU_CRITICAL_EXIT();
-             }
-             break;
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+    TRACE_OS_TASK_SEM_POST(p_tcb);                              /* Record the event.                                    */
+#endif
 
-        default:
-             CPU_CRITICAL_EXIT();
-            *p_err = OS_ERR_STATE_INVALID;
-             ctr   = 0u;
-             break;
-    }
-
-    OS_TRACE_TASK_SEM_POST_EXIT(*p_err);
+    ctr = OS_TaskSemPost(p_tcb,
+                         opt,
+                         ts,
+                         p_err);
 
     return (ctr);
 }
@@ -1963,7 +1917,7 @@ OS_SEM_CTR  OSTaskSemSet (OS_TCB      *p_tcb,
 
 
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return (0u);
     }
@@ -1977,7 +1931,7 @@ OS_SEM_CTR  OSTaskSemSet (OS_TCB      *p_tcb,
 #endif
 
     CPU_CRITICAL_ENTER();
-    if (p_tcb == (OS_TCB *)0) {
+    if (p_tcb == DEF_NULL) {
         p_tcb = OSTCBCurPtr;
     }
 
@@ -1988,7 +1942,7 @@ OS_SEM_CTR  OSTaskSemSet (OS_TCB      *p_tcb,
         return (0u);
     }
 
-    ctr           =  p_tcb->SemCtr;
+    ctr           = p_tcb->SemCtr;
     p_tcb->SemCtr = (OS_SEM_CTR)cnt;
     CPU_CRITICAL_EXIT();
    *p_err         =  OS_ERR_NONE;
@@ -2031,13 +1985,12 @@ void  OSTaskStkChk (OS_TCB        *p_tcb,
                     OS_ERR        *p_err)
 {
     CPU_STK_SIZE  free_stk;
-    CPU_STK_SIZE  stk_size;
     CPU_STK      *p_stk;
     CPU_SR_ALLOC();
 
 
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return;
     }
@@ -2051,23 +2004,23 @@ void  OSTaskStkChk (OS_TCB        *p_tcb,
 #endif
 
 #if (OS_CFG_ARG_CHK_EN == DEF_ENABLED)
-    if (p_free == (CPU_STK_SIZE *)0) {                          /* User must specify valid destinations for the sizes   */
+    if (p_free == DEF_NULL) {                                   /* User must specify valid destinations for the sizes   */
        *p_err = OS_ERR_PTR_INVALID;
         return;
     }
 
-    if (p_used == (CPU_STK_SIZE *)0) {
+    if (p_used == DEF_NULL) {
        *p_err = OS_ERR_PTR_INVALID;
         return;
     }
 #endif
 
     CPU_CRITICAL_ENTER();
-    if (p_tcb == (OS_TCB *)0) {                                 /* Check the stack of the current task?                 */
+    if (p_tcb == DEF_NULL) {                                    /* Check the stack of the current task?                 */
         p_tcb = OSTCBCurPtr;                                    /* Yes                                                  */
     }
 
-    if (p_tcb->StkPtr == (CPU_STK *)0) {                        /* Make sure task exist                                 */
+    if (p_tcb->StkPtr == DEF_NULL) {                            /* Make sure task exist                                 */
         CPU_CRITICAL_EXIT();
        *p_free = 0u;
        *p_used = 0u;
@@ -2082,33 +2035,24 @@ void  OSTaskStkChk (OS_TCB        *p_tcb,
        *p_err  = OS_ERR_TASK_OPT;
         return;
     }
+    CPU_CRITICAL_EXIT();
 
+    free_stk = 0u;
 #if (CPU_CFG_STK_GROWTH == CPU_STK_GROWTH_HI_TO_LO)
     p_stk = p_tcb->StkBasePtr;                                  /* Start at the lowest memory and go up                 */
 #if (OS_CFG_TASK_STK_REDZONE_EN == DEF_ENABLED)
     p_stk += OS_CFG_TASK_STK_REDZONE_DEPTH;
 #endif
+    while (*p_stk == 0u) {                                      /* Compute the number of zero entries on the stk        */
+        p_stk++;
+        free_stk++;
+    }
 #else
     p_stk = p_tcb->StkBasePtr + p_tcb->StkSize - 1u;            /* Start at the highest memory and go down              */
 #if (OS_CFG_TASK_STK_REDZONE_EN == DEF_ENABLED)
     p_stk -= OS_CFG_TASK_STK_REDZONE_DEPTH;
 #endif
-#endif
-
-    stk_size = p_tcb->StkSize;
-    CPU_CRITICAL_EXIT();
-
-    free_stk = 0u;
-                                                                /* Compute the number of zero entries on the stk        */
-#if (CPU_CFG_STK_GROWTH == CPU_STK_GROWTH_HI_TO_LO)
-    while ((free_stk  < stk_size) &&
-           (*p_stk   ==       0u)) {
-        p_stk++;
-        free_stk++;
-    }
-#else
-    while ((free_stk  < stk_size) &&
-           (*p_stk   ==       0u)) {
+    while (*p_stk == 0u) {
         free_stk++;
         p_stk--;
     }
@@ -2117,7 +2061,7 @@ void  OSTaskStkChk (OS_TCB        *p_tcb,
     free_stk -= OS_CFG_TASK_STK_REDZONE_DEPTH;                  /* Compensate for stack elements used by Redzone.       */
 #endif
    *p_free = free_stk;
-   *p_used = (stk_size - free_stk);                             /* Compute number of entries used on the stack          */
+   *p_used = (p_tcb->StkSize - free_stk);                       /* Compute number of entries used on the stack          */
    *p_err  = OS_ERR_NONE;
 }
 #endif
@@ -2143,7 +2087,7 @@ CPU_BOOLEAN  OSTaskStkRedzoneChk (OS_TCB  *p_tcb)
     CPU_BOOLEAN  stk_status;
 
 
-    if (p_tcb == (OS_TCB *)0) {
+    if (p_tcb == DEF_NULL) {
         p_tcb = OSTCBCurPtr;
     }
                                                                 /* Check if SP is valid:                                */
@@ -2173,6 +2117,7 @@ CPU_BOOLEAN  OSTaskStkRedzoneChk (OS_TCB  *p_tcb)
 *              p_err    is a pointer to a variable that will receive an error code from this function.
 *
 *                           OS_ERR_NONE                        If the requested task is suspended
+*                           OS_ERR_INT_Q_FULL                  If the deferred interrupt post queue is full
 *                           OS_ERR_OS_NOT_RUNNING              If uC/OS-III is not running yet
 *                           OS_ERR_SCHED_LOCKED                You can't suspend the current task is the scheduler is
 *                                                                  locked
@@ -2196,17 +2141,15 @@ CPU_BOOLEAN  OSTaskStkRedzoneChk (OS_TCB  *p_tcb)
 void   OSTaskSuspend (OS_TCB  *p_tcb,
                       OS_ERR  *p_err)
 {
-    CPU_SR_ALLOC();
-
-
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return;
     }
 #endif
 
-#if (OS_CFG_CALLED_FROM_ISR_CHK_EN == DEF_ENABLED)
+#if (OS_CFG_ISR_POST_DEFERRED_EN   == DEF_DISABLED) && \
+    (OS_CFG_CALLED_FROM_ISR_CHK_EN == DEF_ENABLED)
     if (OSIntNestingCtr > 0u) {                                 /* Not allowed to call from an ISR                      */
        *p_err = OS_ERR_TASK_SUSPEND_ISR;
         return;
@@ -2220,75 +2163,26 @@ void   OSTaskSuspend (OS_TCB  *p_tcb,
     }
 #endif
 
-    OS_TRACE_TASK_SUSPEND(p_tcb);
-
-    CPU_CRITICAL_ENTER();
-    if (p_tcb == (OS_TCB *)0) {                                 /* See if specified to suspend self                     */
-        if (OSRunning != OS_STATE_OS_RUNNING) {                 /* Can't suspend self when the kernel isn't running     */
-            CPU_CRITICAL_EXIT();
-           *p_err = OS_ERR_OS_NOT_RUNNING;
-            return;
-        }
-        p_tcb = OSTCBCurPtr;
+#if (OS_CFG_ISR_POST_DEFERRED_EN == DEF_ENABLED)
+    if (p_tcb == &OSIntQTaskTCB) {                              /* Not allowed to suspend the ISR handler task          */
+       *p_err = OS_ERR_TASK_SUSPEND_INT_HANDLER;
+        return;
     }
 
-    if (p_tcb == OSTCBCurPtr) {
-        if (OSSchedLockNestingCtr > 0u) {                       /* Can't suspend when the scheduler is locked           */
-            CPU_CRITICAL_EXIT();
-           *p_err = OS_ERR_SCHED_LOCKED;
-            return;
-        }
+    if (OSIntNestingCtr > 0u) {                                 /* See if called from an ISR                            */
+        OS_IntQPost(OS_OBJ_TYPE_TASK_SUSPEND,                   /* Post to ISR queue                                    */
+                    (void *)p_tcb,
+                    DEF_NULL,
+                    0u,
+                    0u,
+                    0u,
+                    0u,
+                    p_err);
+        return;
     }
+#endif
 
-   *p_err = OS_ERR_NONE;
-    switch (p_tcb->TaskState) {
-        case OS_TASK_STATE_RDY:
-             p_tcb->TaskState  =  OS_TASK_STATE_SUSPENDED;
-             p_tcb->SuspendCtr = 1u;
-             OS_RdyListRemove(p_tcb);
-             CPU_CRITICAL_EXIT();
-             break;
-
-        case OS_TASK_STATE_DLY:
-             p_tcb->TaskState  = OS_TASK_STATE_DLY_SUSPENDED;
-             p_tcb->SuspendCtr = 1u;
-             CPU_CRITICAL_EXIT();
-             break;
-
-        case OS_TASK_STATE_PEND:
-             p_tcb->TaskState  = OS_TASK_STATE_PEND_SUSPENDED;
-             p_tcb->SuspendCtr = 1u;
-             CPU_CRITICAL_EXIT();
-             break;
-
-        case OS_TASK_STATE_PEND_TIMEOUT:
-             p_tcb->TaskState  = OS_TASK_STATE_PEND_TIMEOUT_SUSPENDED;
-             p_tcb->SuspendCtr = 1u;
-             CPU_CRITICAL_EXIT();
-             break;
-
-        case OS_TASK_STATE_SUSPENDED:
-        case OS_TASK_STATE_DLY_SUSPENDED:
-        case OS_TASK_STATE_PEND_SUSPENDED:
-        case OS_TASK_STATE_PEND_TIMEOUT_SUSPENDED:
-             if (p_tcb->SuspendCtr == (OS_NESTING_CTR)-1) {
-                 CPU_CRITICAL_EXIT();
-                *p_err = OS_ERR_TASK_SUSPEND_CTR_OVF;
-                 return;
-             }
-             p_tcb->SuspendCtr++;
-             CPU_CRITICAL_EXIT();
-             break;
-
-        default:
-             CPU_CRITICAL_EXIT();
-            *p_err = OS_ERR_STATE_INVALID;
-             return;
-    }
-
-    if (OSRunning == OS_STATE_OS_RUNNING) {                     /* Only schedule when the kernel is running             */
-        OSSched();
-    }
+    OS_TaskSuspend(p_tcb, p_err);
 }
 #endif
 
@@ -2325,7 +2219,7 @@ void  OSTaskTimeQuantaSet (OS_TCB   *p_tcb,
 
 
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return;
     }
@@ -2339,7 +2233,7 @@ void  OSTaskTimeQuantaSet (OS_TCB   *p_tcb,
 #endif
 
     CPU_CRITICAL_ENTER();
-    if (p_tcb == (OS_TCB *)0) {
+    if (p_tcb == DEF_NULL) {
         p_tcb = OSTCBCurPtr;
     }
 
@@ -2374,9 +2268,9 @@ void  OSTaskTimeQuantaSet (OS_TCB   *p_tcb,
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
 void  OS_TaskDbgListAdd (OS_TCB  *p_tcb)
 {
-    p_tcb->DbgPrevPtr                = (OS_TCB *)0;
-    if (OSTaskDbgListPtr == (OS_TCB *)0) {
-        p_tcb->DbgNextPtr            = (OS_TCB *)0;
+    p_tcb->DbgPrevPtr                = DEF_NULL;
+    if (OSTaskDbgListPtr == DEF_NULL) {
+        p_tcb->DbgNextPtr            = DEF_NULL;
     } else {
         p_tcb->DbgNextPtr            =  OSTaskDbgListPtr;
         OSTaskDbgListPtr->DbgPrevPtr =  p_tcb;
@@ -2395,22 +2289,22 @@ void  OS_TaskDbgListRemove (OS_TCB  *p_tcb)
     p_tcb_prev = p_tcb->DbgPrevPtr;
     p_tcb_next = p_tcb->DbgNextPtr;
 
-    if (p_tcb_prev == (OS_TCB *)0) {
+    if (p_tcb_prev == DEF_NULL) {
         OSTaskDbgListPtr = p_tcb_next;
-        if (p_tcb_next != (OS_TCB *)0) {
-            p_tcb_next->DbgPrevPtr = (OS_TCB *)0;
+        if (p_tcb_next != DEF_NULL) {
+            p_tcb_next->DbgPrevPtr = DEF_NULL;
         }
-        p_tcb->DbgNextPtr = (OS_TCB *)0;
+        p_tcb->DbgNextPtr = DEF_NULL;
 
-    } else if (p_tcb_next == (OS_TCB *)0) {
-        p_tcb_prev->DbgNextPtr = (OS_TCB *)0;
-        p_tcb->DbgPrevPtr      = (OS_TCB *)0;
+    } else if (p_tcb_next == DEF_NULL) {
+        p_tcb_prev->DbgNextPtr = DEF_NULL;
+        p_tcb->DbgPrevPtr      = DEF_NULL;
 
     } else {
         p_tcb_prev->DbgNextPtr =  p_tcb_next;
         p_tcb_next->DbgPrevPtr =  p_tcb_prev;
-        p_tcb->DbgNextPtr      = (OS_TCB *)0;
-        p_tcb->DbgPrevPtr      = (OS_TCB *)0;
+        p_tcb->DbgNextPtr      = DEF_NULL;
+        p_tcb->DbgPrevPtr      = DEF_NULL;
     }
 }
 #endif
@@ -2436,7 +2330,7 @@ void  OS_TaskDbgListRemove (OS_TCB  *p_tcb)
 void  OS_TaskInit (OS_ERR  *p_err)
 {
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
-    OSTaskDbgListPtr = (OS_TCB *)0;
+    OSTaskDbgListPtr = DEF_NULL;
 #endif
 
     OSTaskQty        = 0u;                                      /* Clear the number of tasks                            */
@@ -2473,139 +2367,334 @@ void  OS_TaskInitTCB (OS_TCB  *p_tcb)
 #endif
 
 
-    p_tcb->StkPtr               = (CPU_STK          *)0;
-    p_tcb->StkLimitPtr          = (CPU_STK          *)0;
+    p_tcb->StkPtr             = DEF_NULL;
+#if ((OS_CFG_DBG_EN == DEF_ENABLED) || (OS_CFG_STAT_TASK_STK_CHK_EN == DEF_ENABLED))
+    p_tcb->StkLimitPtr        = DEF_NULL;
+#endif
 
-    p_tcb->ExtPtr               = (void             *)0;
+    p_tcb->ExtPtr             = DEF_NULL;
 
-    p_tcb->NextPtr              = (OS_TCB           *)0;
-    p_tcb->PrevPtr              = (OS_TCB           *)0;
+    p_tcb->NextPtr            = DEF_NULL;
+    p_tcb->PrevPtr            = DEF_NULL;
 
-#if (OS_CFG_TICK_EN == DEF_ENABLED)
-    p_tcb->TickNextPtr          = (OS_TCB           *)0;
-    p_tcb->TickPrevPtr          = (OS_TCB           *)0;
+#if (OS_CFG_TASK_TICK_EN == DEF_ENABLED)
+    p_tcb->TickNextPtr        = DEF_NULL;
+    p_tcb->TickPrevPtr        = DEF_NULL;
+    p_tcb->TickListPtr        = DEF_NULL;
 #endif
 
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
-    p_tcb->NamePtr              = (CPU_CHAR *)((void *)"?Task");
+    p_tcb->NamePtr            = (CPU_CHAR *)((void *)"?Task");
 #endif
 
 #if ((OS_CFG_DBG_EN == DEF_ENABLED) || (OS_CFG_STAT_TASK_STK_CHK_EN == DEF_ENABLED))
-    p_tcb->StkBasePtr           = (CPU_STK          *)0;
+    p_tcb->StkBasePtr         = DEF_NULL;
 #endif
 
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
-    p_tcb->TaskEntryAddr        = (OS_TASK_PTR       )0;
-    p_tcb->TaskEntryArg         = (void             *)0;
+    p_tcb->TaskEntryAddr      = 0u;
+    p_tcb->TaskEntryArg       = DEF_NULL;
+#endif
+
+#if (OS_CFG_PEND_MULTI_EN == DEF_ENABLED)
+    p_tcb->PendDataTblPtr     = DEF_NULL;
+    p_tcb->PendDataTblEntries = 0u;
 #endif
 
 #if (OS_CFG_TS_EN == DEF_ENABLED)
-    p_tcb->TS                   =                     0u;
+    p_tcb->TS                 = 0u;
 #endif
 
 #if (OS_MSG_EN == DEF_ENABLED)
-    p_tcb->MsgPtr               = (void             *)0;
-    p_tcb->MsgSize              =                     0u;
+    p_tcb->MsgPtr             = DEF_NULL;
+    p_tcb->MsgSize            = 0u;
 #endif
 
 #if (OS_CFG_TASK_Q_EN == DEF_ENABLED)
     OS_MsgQInit(&p_tcb->MsgQ,
                  0u);
 #if (OS_CFG_TASK_PROFILE_EN == DEF_ENABLED)
-    p_tcb->MsgQPendTime         =                     0u;
-    p_tcb->MsgQPendTimeMax      =                     0u;
+    p_tcb->MsgQPendTime       = 0u;
+    p_tcb->MsgQPendTimeMax    = 0u;
 #endif
 #endif
 
 #if (OS_CFG_FLAG_EN == DEF_ENABLED)
-    p_tcb->FlagsPend            =                     0u;
-    p_tcb->FlagsOpt             =                     0u;
-    p_tcb->FlagsRdy             =                     0u;
+    p_tcb->FlagsPend          = 0u;
+    p_tcb->FlagsOpt           = 0u;
+    p_tcb->FlagsRdy           = 0u;
 #endif
 
 #if (OS_CFG_TASK_REG_TBL_SIZE > 0u)
     for (reg_id = 0u; reg_id < OS_CFG_TASK_REG_TBL_SIZE; reg_id++) {
-        p_tcb->RegTbl[reg_id]   =                     0u;
+        p_tcb->RegTbl[reg_id] = 0u;
     }
 #endif
 
 #if defined(OS_CFG_TLS_TBL_SIZE) && (OS_CFG_TLS_TBL_SIZE > 0u)
     for (id = 0u; id < OS_CFG_TLS_TBL_SIZE; id++) {
-        p_tcb->TLS_Tbl[id]      =                     0u;
+        p_tcb->TLS_Tbl[id]    = 0u;
     }
 #endif
 
-    p_tcb->SemCtr               =                     0u;
+    p_tcb->SemCtr             = 0u;
 #if (OS_CFG_TASK_PROFILE_EN == DEF_ENABLED)
-    p_tcb->SemPendTime          =                     0u;
-    p_tcb->SemPendTimeMax       =                     0u;
+    p_tcb->SemPendTime        = 0u;
+    p_tcb->SemPendTimeMax     = 0u;
 #endif
 
 #if ((OS_CFG_DBG_EN == DEF_ENABLED) || (OS_CFG_STAT_TASK_STK_CHK_EN == DEF_ENABLED))
-    p_tcb->StkSize              =                     0u;
+    p_tcb->StkSize            = 0u;
 #endif
 
 
 #if (OS_CFG_TASK_SUSPEND_EN == DEF_ENABLED)
-    p_tcb->SuspendCtr           =                     0u;
+    p_tcb->SuspendCtr         = 0u;
 #endif
 
 #if (OS_CFG_STAT_TASK_STK_CHK_EN == DEF_ENABLED)
-    p_tcb->StkFree              =                     0u;
-    p_tcb->StkUsed              =                     0u;
+    p_tcb->StkFree            = 0u;
+    p_tcb->StkUsed            = 0u;
 #endif
 
-    p_tcb->Opt                  =                     0u;
+    p_tcb->Opt                = 0u;
 
-#if (OS_CFG_TICK_EN == DEF_ENABLED)
-    p_tcb->TickRemain           =                     0u;
-    p_tcb->TickCtrPrev          =                     0u;
+#if (OS_CFG_TASK_TICK_EN == DEF_ENABLED)
+    p_tcb->TickRemain         = 0u;
+    p_tcb->TickCtrPrev        = 0u;
 #endif
 
 #if (OS_CFG_SCHED_ROUND_ROBIN_EN == DEF_ENABLED)
-    p_tcb->TimeQuanta           =                     0u;
-    p_tcb->TimeQuantaCtr        =                     0u;
+    p_tcb->TimeQuanta         = 0u;
+    p_tcb->TimeQuantaCtr      = 0u;
 #endif
 
 #if (OS_CFG_TASK_PROFILE_EN == DEF_ENABLED)
-    p_tcb->CPUUsage             =                     0u;
-    p_tcb->CPUUsageMax          =                     0u;
-    p_tcb->CtxSwCtr             =                     0u;
-    p_tcb->CyclesDelta          =                     0u;
+    p_tcb->CPUUsage           = 0u;
+    p_tcb->CPUUsageMax        = 0u;
+    p_tcb->CtxSwCtr           = 0u;
+    p_tcb->CyclesDelta        = 0u;
 #if (OS_CFG_TS_EN == DEF_ENABLED)
-    p_tcb->CyclesStart          =  OS_TS_GET();                 /* Read the current timestamp and save                  */
+    p_tcb->CyclesStart        = OS_TS_GET();                    /* Read the current timestamp and save                    */
 #else
-    p_tcb->CyclesStart          =                     0u;
+    p_tcb->CyclesStart        = 0u;
 #endif
-    p_tcb->CyclesTotal          =                     0u;
+    p_tcb->CyclesTotal        = 0u;
 #endif
 
 #ifdef CPU_CFG_INT_DIS_MEAS_EN
-    p_tcb->IntDisTimeMax        =                     0u;
+    p_tcb->IntDisTimeMax      = 0u;
 #endif
 #if (OS_CFG_SCHED_LOCK_TIME_MEAS_EN == DEF_ENABLED)
-    p_tcb->SchedLockTimeMax     =                     0u;
+    p_tcb->SchedLockTimeMax   = 0u;
 #endif
 
-    p_tcb->PendNextPtr          = (OS_TCB           *)0;
-    p_tcb->PendPrevPtr          = (OS_TCB           *)0;
-    p_tcb->PendObjPtr           = (OS_PEND_OBJ      *)0;
-    p_tcb->PendOn               =  OS_TASK_PEND_ON_NOTHING;
-    p_tcb->PendStatus           =  OS_STATUS_PEND_OK;
-    p_tcb->TaskState            =  OS_TASK_STATE_RDY;
+    p_tcb->PendOn             = OS_TASK_PEND_ON_NOTHING;
+    p_tcb->PendStatus         = OS_STATUS_PEND_OK;
+    p_tcb->TaskState          = OS_TASK_STATE_RDY;
 
-    p_tcb->Prio                 =  OS_PRIO_INIT;
+    p_tcb->Prio               = OS_PRIO_INIT;
 #if (OS_CFG_MUTEX_EN == DEF_ENABLED)
-    p_tcb->BasePrio             =  OS_PRIO_INIT;
-    p_tcb->MutexGrpHeadPtr      = (OS_MUTEX         *)0;
+    p_tcb->BasePrio           = OS_PRIO_INIT;
+    p_tcb->MutexGrpHeadPtr    = DEF_NULL;
 #endif
 
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
-    p_tcb->DbgPrevPtr           = (OS_TCB           *)0;
-    p_tcb->DbgNextPtr           = (OS_TCB           *)0;
-    p_tcb->DbgNamePtr           = (CPU_CHAR *)((void *)" ");
+    p_tcb->DbgPrevPtr         = DEF_NULL;
+    p_tcb->DbgNextPtr         = DEF_NULL;
+    p_tcb->DbgNamePtr         = (CPU_CHAR *)((void *)" ");
 #endif
 }
+
+
+/*
+************************************************************************************************************************
+*                                               POST MESSAGE TO A TASK
+*
+* Description: This function sends a message to a task
+*
+* Arguments  : p_tcb      is a pointer to the TCB of the task receiving a message.  If you specify a NULL pointer then
+*                         the message will be posted to the task's queue of the calling task.  In other words, you'd be
+*                         posting a message to yourself.
+*
+*              p_void     is a pointer to the message to send.
+*
+*              msg_size   is the size of the message sent (in #bytes)
+*
+*              opt        specifies whether the post will be FIFO or LIFO:
+*
+*                             OS_OPT_POST_FIFO       Post at the end   of the queue
+*                             OS_OPT_POST_LIFO       Post at the front of the queue
+*
+*                             OS_OPT_POST_NO_SCHED   Do not run the scheduler after the post
+*
+*                          Note(s): 1) OS_OPT_POST_NO_SCHED can be added with one of the other options.
+*
+*
+*              ts         is a timestamp indicating when the post occurred.
+*
+*              p_err      is a pointer to a variable that will hold the error code associated
+*                         with the outcome of this call.  Errors can be:
+*
+*                             OS_ERR_NONE            The call was successful and the message was sent
+*                             OS_ERR_MSG_POOL_EMPTY  If there are no more OS_MSGs available from the pool
+*                             OS_ERR_Q_MAX           If the queue is full
+*                             OS_ERR_STATE_INVALID   If the task is in an invalid state.  This should never happen
+*                                                    and if it does, would be considered a system failure.
+*
+* Returns    : none
+*
+* Note(s)    : This function is INTERNAL to uC/OS-III and your application should not call it.
+************************************************************************************************************************
+*/
+
+#if (OS_CFG_TASK_Q_EN == DEF_ENABLED)
+void  OS_TaskQPost (OS_TCB       *p_tcb,
+                    void         *p_void,
+                    OS_MSG_SIZE   msg_size,
+                    OS_OPT        opt,
+                    CPU_TS        ts,
+                    OS_ERR       *p_err)
+{
+    CPU_SR_ALLOC();
+
+
+
+   *p_err = OS_ERR_NONE;                                        /* Assume we won't have any errors                      */
+    OS_CRITICAL_ENTER();
+    if (p_tcb == DEF_NULL) {                                    /* Post msg to 'self'?                                  */
+        p_tcb = OSTCBCurPtr;
+    }
+    switch (p_tcb->TaskState) {
+        case OS_TASK_STATE_RDY:
+        case OS_TASK_STATE_DLY:
+        case OS_TASK_STATE_SUSPENDED:
+        case OS_TASK_STATE_DLY_SUSPENDED:
+             OS_MsgQPut(&p_tcb->MsgQ,                           /* Deposit the message in the queue                     */
+                        p_void,
+                        msg_size,
+                        opt,
+                        ts,
+                        p_err);
+             OS_CRITICAL_EXIT();
+             break;
+
+        case OS_TASK_STATE_PEND:
+        case OS_TASK_STATE_PEND_TIMEOUT:
+        case OS_TASK_STATE_PEND_SUSPENDED:
+        case OS_TASK_STATE_PEND_TIMEOUT_SUSPENDED:
+             if (p_tcb->PendOn == OS_TASK_PEND_ON_TASK_Q) {     /* Is task waiting for a message to be sent to it?      */
+                 OS_Post(DEF_NULL,
+                         p_tcb,
+                         p_void,
+                         msg_size,
+                         ts);
+                 OS_CRITICAL_EXIT_NO_SCHED();
+                 if ((opt & OS_OPT_POST_NO_SCHED) == 0u) {
+                     OSSched();                                 /* Run the scheduler                                    */
+                 }
+             } else {
+                 OS_MsgQPut(&p_tcb->MsgQ,                       /* No,  Task is pending on something else ...           */
+                            p_void,                             /* ... Deposit the message in the task's queue          */
+                            msg_size,
+                            opt,
+                            ts,
+                            p_err);
+                 OS_CRITICAL_EXIT();
+             }
+             break;
+
+        default:
+             OS_CRITICAL_EXIT();
+            *p_err = OS_ERR_STATE_INVALID;
+             break;
+    }
+}
+#endif
+
+
+/*
+************************************************************************************************************************
+*                                               RESUME A SUSPENDED TASK
+*
+* Description: This function is called to resume a previously suspended task.  This is the only call that will remove an
+*              explicit task suspension.
+*
+* Arguments  : p_tcb      Is a pointer to the task's OS_TCB to resume
+*
+*              p_err      Is a pointer to a variable that will contain an error code returned by this function
+*
+*                             OS_ERR_NONE                  if the requested task is resumed
+*                             OS_ERR_STATE_INVALID         if the task is in an invalid state
+*                             OS_ERR_TASK_NOT_SUSPENDED    if the task to resume has not been suspended
+*
+* Returns    : none
+*
+* Note(s)    : This function is INTERNAL to uC/OS-III and your application should not call it.
+************************************************************************************************************************
+*/
+
+#if (OS_CFG_TASK_SUSPEND_EN == DEF_ENABLED)
+void  OS_TaskResume (OS_TCB  *p_tcb,
+                     OS_ERR  *p_err)
+{
+    CPU_SR_ALLOC();
+
+
+    CPU_CRITICAL_ENTER();
+   *p_err  = OS_ERR_NONE;
+    switch (p_tcb->TaskState) {
+        case OS_TASK_STATE_RDY:
+        case OS_TASK_STATE_DLY:
+        case OS_TASK_STATE_PEND:
+        case OS_TASK_STATE_PEND_TIMEOUT:
+             CPU_CRITICAL_EXIT();
+            *p_err = OS_ERR_TASK_NOT_SUSPENDED;
+             break;
+
+        case OS_TASK_STATE_SUSPENDED:
+             OS_CRITICAL_ENTER_CPU_EXIT();
+             p_tcb->SuspendCtr--;
+             if (p_tcb->SuspendCtr == 0u) {
+                 p_tcb->TaskState = OS_TASK_STATE_RDY;
+                 OS_RdyListInsert(p_tcb);                       /* Insert the task in the ready list                    */
+             }
+             OS_CRITICAL_EXIT_NO_SCHED();
+             break;
+
+        case OS_TASK_STATE_DLY_SUSPENDED:
+             p_tcb->SuspendCtr--;
+             if (p_tcb->SuspendCtr == 0u) {
+                 p_tcb->TaskState = OS_TASK_STATE_DLY;
+             }
+             CPU_CRITICAL_EXIT();
+             break;
+
+        case OS_TASK_STATE_PEND_SUSPENDED:
+             p_tcb->SuspendCtr--;
+             if (p_tcb->SuspendCtr == 0u) {
+                 p_tcb->TaskState = OS_TASK_STATE_PEND;
+             }
+             CPU_CRITICAL_EXIT();
+             break;
+
+        case OS_TASK_STATE_PEND_TIMEOUT_SUSPENDED:
+             p_tcb->SuspendCtr--;
+             if (p_tcb->SuspendCtr == 0u) {
+                 p_tcb->TaskState = OS_TASK_STATE_PEND_TIMEOUT;
+             }
+             CPU_CRITICAL_EXIT();
+             break;
+
+        default:
+             CPU_CRITICAL_EXIT();
+            *p_err = OS_ERR_STATE_INVALID;
+             return;
+    }
+
+    OSSched();
+}
+#endif
 
 
 /*
@@ -2631,15 +2720,165 @@ void  OS_TaskReturn (void)
 
     OSTaskReturnHook(OSTCBCurPtr);                              /* Call hook to let user decide on what to do           */
 #if (OS_CFG_TASK_DEL_EN == DEF_ENABLED)
-    OSTaskDel((OS_TCB *)0,                                      /* Delete task if it accidentally returns!              */
+    OSTaskDel( DEF_NULL,                                        /* Delete task if it accidentally returns!              */
               &err);
 #else
-    for (;;) {
+    while (DEF_TRUE) {
         OSTimeDly(OSCfg_TickRate_Hz,
                   OS_OPT_TIME_DLY,
                   &err);
+        (void)err;
     }
 #endif
+}
+
+
+/*
+************************************************************************************************************************
+*                                                    SIGNAL A TASK
+*
+* Description: This function is called to signal a task waiting for a signal.
+*
+* Arguments  : p_tcb     is the pointer to the TCB of the task to signal.  A NULL pointer indicates that you are sending
+*                        a signal to yourself.
+*
+*              opt       determines the type of POST performed:
+*
+*                             OS_OPT_POST_NONE         No option
+*
+*                             OS_OPT_POST_NO_SCHED     Do not call the scheduler
+*
+*              ts        is a timestamp indicating when the post occurred.
+*
+*              p_err     is a pointer to an error code returned by this function:
+*
+*                            OS_ERR_NONE           If the requested task is signaled
+*                            OS_ERR_SEM_OVF        If the post would cause the semaphore count to overflow.
+*                            OS_ERR_STATE_INVALID  If the task is in an invalid state.  This should never happen
+*                                                  and if it does, would be considered a system failure.
+*
+* Returns    : The current value of the task's signal counter or 0 if called from an ISR
+*
+* Note(s)    : This function is INTERNAL to uC/OS-III and your application should not call it.
+************************************************************************************************************************
+*/
+
+OS_SEM_CTR  OS_TaskSemPost (OS_TCB  *p_tcb,
+                            OS_OPT   opt,
+                            CPU_TS   ts,
+                            OS_ERR  *p_err)
+{
+    OS_SEM_CTR  ctr;
+    CPU_SR_ALLOC();
+
+
+#if (OS_CFG_TS_EN == DEF_DISABLED)
+    (void)ts;                                                   /* Prevent compiler warning for not using 'ts'          */
+#endif
+
+    OS_CRITICAL_ENTER();
+    if (p_tcb == DEF_NULL) {                                    /* Post signal to 'self'?                               */
+        p_tcb = OSTCBCurPtr;
+    }
+#if (OS_CFG_TS_EN == DEF_ENABLED)
+    p_tcb->TS = ts;
+#endif
+   *p_err     = OS_ERR_NONE;                                    /* Assume we won't have any errors                      */
+    switch (p_tcb->TaskState) {
+        case OS_TASK_STATE_RDY:
+        case OS_TASK_STATE_DLY:
+        case OS_TASK_STATE_SUSPENDED:
+        case OS_TASK_STATE_DLY_SUSPENDED:
+             switch (sizeof(OS_SEM_CTR)) {
+                 case 1u:
+                      if (p_tcb->SemCtr == DEF_INT_08U_MAX_VAL) {
+                          OS_CRITICAL_EXIT();
+                         *p_err = OS_ERR_SEM_OVF;
+                          return (0u);
+                      }
+                      break;
+
+                 case 2u:
+                      if (p_tcb->SemCtr == DEF_INT_16U_MAX_VAL) {
+                          OS_CRITICAL_EXIT();
+                         *p_err = OS_ERR_SEM_OVF;
+                          return (0u);
+                      }
+                      break;
+
+                 case 4u:
+                      if (p_tcb->SemCtr == DEF_INT_32U_MAX_VAL) {
+                          OS_CRITICAL_EXIT();
+                         *p_err = OS_ERR_SEM_OVF;
+                          return (0u);
+                      }
+                      break;
+
+                 default:
+                      break;
+             }
+             p_tcb->SemCtr++;                                   /* Task signaled is not pending on anything             */
+             ctr = p_tcb->SemCtr;
+             OS_CRITICAL_EXIT();
+             break;
+
+        case OS_TASK_STATE_PEND:
+        case OS_TASK_STATE_PEND_TIMEOUT:
+        case OS_TASK_STATE_PEND_SUSPENDED:
+        case OS_TASK_STATE_PEND_TIMEOUT_SUSPENDED:
+             if (p_tcb->PendOn == OS_TASK_PEND_ON_TASK_SEM) {   /* Is task signaled waiting for a signal?               */
+                 OS_Post(DEF_NULL,                              /* Task is pending on signal                            */
+                         p_tcb,
+                         DEF_NULL,
+                         0u,
+                         ts);
+                 ctr = p_tcb->SemCtr;
+                 OS_CRITICAL_EXIT_NO_SCHED();
+                 if ((opt & OS_OPT_POST_NO_SCHED) == 0u) {
+                     OSSched();                                 /* Run the scheduler                                    */
+                 }
+             } else {
+                 switch (sizeof(OS_SEM_CTR)) {
+                     case 1u:
+                          if (p_tcb->SemCtr == DEF_INT_08U_MAX_VAL) {
+                              OS_CRITICAL_EXIT();
+                             *p_err = OS_ERR_SEM_OVF;
+                              return (0u);
+                          }
+                          break;
+
+                     case 2u:
+                          if (p_tcb->SemCtr == DEF_INT_16U_MAX_VAL) {
+                              OS_CRITICAL_EXIT();
+                             *p_err = OS_ERR_SEM_OVF;
+                              return (0u);
+                          }
+                          break;
+
+                     case 4u:
+                          if (p_tcb->SemCtr == DEF_INT_32U_MAX_VAL) {
+                              OS_CRITICAL_EXIT();
+                             *p_err = OS_ERR_SEM_OVF;
+                              return (0u);
+                          }
+                          break;
+
+                     default:
+                          break;
+                 }
+                 p_tcb->SemCtr++;                               /* No,  Task signaled is NOT pending on semaphore ...   */
+                 ctr = p_tcb->SemCtr;                           /* ... it must be waiting on something else             */
+                 OS_CRITICAL_EXIT();
+             }
+             break;
+
+        default:
+             OS_CRITICAL_EXIT();
+            *p_err = OS_ERR_STATE_INVALID;
+             ctr   = 0u;
+             break;
+    }
+    return (ctr);
 }
 
 
@@ -2655,6 +2894,8 @@ void  OS_TaskReturn (void)
 *
 * Returns    : none
 *
+* Caller(s)  : OSTaskStkRedzoneChk() and OSIntExit().
+*
 * Note(s)    : 1) This function is INTERNAL to uC/OS-III and your application should not call it.
 ************************************************************************************************************************
 */
@@ -2667,8 +2908,6 @@ CPU_BOOLEAN   OS_TaskStkRedzoneChk (CPU_STK       *p_base,
 
 
 #if (CPU_CFG_STK_GROWTH == CPU_STK_GROWTH_HI_TO_LO)
-   (void)stk_size;                                              /* Prevent compiler warning for not using 'stk_size'    */
-
     for (i = 0u; i < OS_CFG_TASK_STK_REDZONE_DEPTH; i++) {
         if (*p_base != (CPU_DATA)OS_STACK_CHECK_VAL) {
             return (DEF_FAIL);
@@ -2702,6 +2941,8 @@ CPU_BOOLEAN   OS_TaskStkRedzoneChk (CPU_STK       *p_base,
 *
 * Returns    : If the stack is corrupted (DEF_FAIL) or not (DEF_OK).
 *
+* Caller(s)  : OSTaskCreate() and OSInit().
+*
 * Note(s)    : 1) This function is INTERNAL to uC/OS-III and your application should not call it.
 ************************************************************************************************************************
 */
@@ -2714,8 +2955,6 @@ void  OS_TaskStkRedzoneInit (CPU_STK       *p_base,
 
 
 #if (CPU_CFG_STK_GROWTH == CPU_STK_GROWTH_HI_TO_LO)
-   (void)stk_size;                                              /* Prevent compiler warning for not using 'stk_size'    */
-
     for (i = 0u; i < OS_CFG_TASK_STK_REDZONE_DEPTH; i++) {
         *(p_base + i) = (CPU_DATA)OS_STACK_CHECK_VAL;
     }
@@ -2724,6 +2963,114 @@ void  OS_TaskStkRedzoneInit (CPU_STK       *p_base,
         *(p_base + stk_size - 1u - i) = (CPU_DATA)OS_STACK_CHECK_VAL;
     }
 #endif
+}
+#endif
+
+
+/*
+************************************************************************************************************************
+*                                                   SUSPEND A TASK
+*
+* Description: This function is called to suspend a task.  The task can be the calling task if 'p_tcb' is a NULL pointer
+*              or the pointer to the TCB of the calling task.
+*
+* Arguments  : p_tcb    is a pointer to the TCB to suspend.
+*                       If p_tcb is a NULL pointer then, suspend the current task.
+*
+*              p_err    is a pointer to a variable that will receive an error code from this function.
+*
+*                           OS_ERR_NONE                        If the requested task is suspended
+*                           OS_ERR_OS_NOT_RUNNING              If uC/OS-III is not running yet
+*                           OS_ERR_SCHED_LOCKED                You can't suspend the current task is the scheduler is
+*                                                                locked
+*                           OS_ERR_STATE_INVALID               If the task is in an invalid state
+*                           OS_ERR_TASK_SUSPEND_CTR_OVF        If the nesting counter overflowed.
+*
+* Returns    : none
+*
+* Note(s)    : 1) This function is INTERNAL to uC/OS-III and your application should not call it.
+*
+*              2) You should use this function with great care.  If you suspend a task that is waiting for an event
+*                 (i.e. a message, a semaphore, a queue ...) you will prevent this task from running when the event
+*                 arrives.
+************************************************************************************************************************
+*/
+
+#if (OS_CFG_TASK_SUSPEND_EN == DEF_ENABLED)
+void  OS_TaskSuspend (OS_TCB  *p_tcb,
+                      OS_ERR  *p_err)
+{
+    CPU_SR_ALLOC();
+
+
+    CPU_CRITICAL_ENTER();
+    if (p_tcb == DEF_NULL) {                                    /* See if specified to suspend self                     */
+        if (OSRunning != OS_STATE_OS_RUNNING) {                 /* Can't suspend self when the kernel isn't running     */
+            CPU_CRITICAL_EXIT();
+           *p_err = OS_ERR_OS_NOT_RUNNING;
+            return;
+        }
+        p_tcb = OSTCBCurPtr;
+    }
+
+    if (p_tcb == OSTCBCurPtr) {
+        if (OSSchedLockNestingCtr > 0u) {                       /* Can't suspend when the scheduler is locked           */
+            CPU_CRITICAL_EXIT();
+           *p_err = OS_ERR_SCHED_LOCKED;
+            return;
+        }
+    }
+
+   *p_err = OS_ERR_NONE;
+    switch (p_tcb->TaskState) {
+        case OS_TASK_STATE_RDY:
+             OS_CRITICAL_ENTER_CPU_EXIT();
+             p_tcb->TaskState  =  OS_TASK_STATE_SUSPENDED;
+             p_tcb->SuspendCtr = 1u;
+             OS_RdyListRemove(p_tcb);
+             OS_CRITICAL_EXIT_NO_SCHED();
+             break;
+
+        case OS_TASK_STATE_DLY:
+             p_tcb->TaskState  = OS_TASK_STATE_DLY_SUSPENDED;
+             p_tcb->SuspendCtr = 1u;
+             CPU_CRITICAL_EXIT();
+             break;
+
+        case OS_TASK_STATE_PEND:
+             p_tcb->TaskState  = OS_TASK_STATE_PEND_SUSPENDED;
+             p_tcb->SuspendCtr = 1u;
+             CPU_CRITICAL_EXIT();
+             break;
+
+        case OS_TASK_STATE_PEND_TIMEOUT:
+             p_tcb->TaskState  = OS_TASK_STATE_PEND_TIMEOUT_SUSPENDED;
+             p_tcb->SuspendCtr = 1u;
+             CPU_CRITICAL_EXIT();
+             break;
+
+        case OS_TASK_STATE_SUSPENDED:
+        case OS_TASK_STATE_DLY_SUSPENDED:
+        case OS_TASK_STATE_PEND_SUSPENDED:
+        case OS_TASK_STATE_PEND_TIMEOUT_SUSPENDED:
+			if (p_tcb->SuspendCtr == (OS_NESTING_CTR)-1) {
+                 CPU_CRITICAL_EXIT();
+                *p_err = OS_ERR_TASK_SUSPEND_CTR_OVF;
+                 return;
+             }
+             p_tcb->SuspendCtr++;
+             CPU_CRITICAL_EXIT();
+             break;
+
+        default:
+             CPU_CRITICAL_EXIT();
+            *p_err = OS_ERR_STATE_INVALID;
+             return;
+    }
+
+    if (OSRunning == OS_STATE_OS_RUNNING) {                     /* Only schedule when the kernel is running             */
+        OSSched();
+    }
 }
 #endif
 
@@ -2758,9 +3105,9 @@ void  OS_TaskChangePrio(OS_TCB  *p_tcb,
 
 
     do {
-        p_tcb_owner = (OS_TCB *)0;
+        p_tcb_owner = DEF_NULL;
 #if (OS_CFG_MUTEX_EN == DEF_ENABLED)
-        prio_cur    =  p_tcb->Prio;
+        prio_cur    = p_tcb->Prio;
 #endif
         switch (p_tcb->TaskState) {
             case OS_TASK_STATE_RDY:
@@ -2787,6 +3134,9 @@ void  OS_TaskChangePrio(OS_TCB  *p_tcb,
                  p_tcb->Prio = prio_new;                        /* Set new task priority                                */
                  switch (p_tcb->PendOn) {                       /* What to do depends on what we are pending on         */
                      case OS_TASK_PEND_ON_FLAG:
+#if (OS_CFG_PEND_MULTI_EN == DEF_ENABLED)
+                     case OS_TASK_PEND_ON_MULTI:
+#endif
                      case OS_TASK_PEND_ON_Q:
                      case OS_TASK_PEND_ON_SEM:
                           OS_PendListChangePrio(p_tcb);
@@ -2795,33 +3145,34 @@ void  OS_TaskChangePrio(OS_TCB  *p_tcb,
                      case OS_TASK_PEND_ON_MUTEX:
 #if (OS_CFG_MUTEX_EN == DEF_ENABLED)
                           OS_PendListChangePrio(p_tcb);
-                          p_tcb_owner = ((OS_MUTEX *)((void *)p_tcb->PendObjPtr))->OwnerTCBPtr;
+                          p_tcb_owner = ((OS_MUTEX *)p_tcb->PendDataTblPtr->PendObjPtr)->OwnerTCBPtr;
                           if (prio_cur > prio_new) {            /* Are we increasing the priority?                      */
                               if (p_tcb_owner->Prio <= prio_new) { /* Yes, do we need to give this prio to the owner?   */
-                                  p_tcb_owner = (OS_TCB *)0;
+                                  p_tcb_owner = DEF_NULL;
                               } else {
-                                                                /* Block is empty when trace is disabled.               */
-                                 OS_TRACE_MUTEX_TASK_PRIO_INHERIT(p_tcb_owner, prio_new);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+                                 TRACE_OS_MUTEX_TASK_PRIO_INHERIT(p_tcb_owner, prio_new);
+#endif
                               }
                           } else {
                               if (p_tcb_owner->Prio == prio_cur) { /* No, is it required to check for a lower prio?     */
                                   prio_new = OS_MutexGrpPrioFindHighest(p_tcb_owner);
-                                  prio_new = (prio_new > p_tcb_owner->BasePrio) ? p_tcb_owner->BasePrio : prio_new;
+                                  prio_new = prio_new > p_tcb_owner->BasePrio ? p_tcb_owner->BasePrio : prio_new;
                                   if (prio_new == p_tcb_owner->Prio) {
-                                      p_tcb_owner = (OS_TCB *)0;
+                                      p_tcb_owner = DEF_NULL;
                                   } else {
-                                                                /* Block is empty when trace is disabled.               */
-                                     OS_TRACE_MUTEX_TASK_PRIO_DISINHERIT(p_tcb_owner, prio_new);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+                                     TRACE_OS_MUTEX_TASK_PRIO_DISINHERIT(p_tcb_owner, prio_new);
+#endif
                                   }
                               }
                           }
 #endif
-                          break;
+                         break;
 
                      case OS_TASK_PEND_ON_TASK_Q:
                      case OS_TASK_PEND_ON_TASK_SEM:
                      default:
-                                                                /* Default case.                                        */
                           break;
                  }
                  break;
@@ -2830,5 +3181,5 @@ void  OS_TaskChangePrio(OS_TCB  *p_tcb,
                  return;
         }
         p_tcb = p_tcb_owner;
-    } while (p_tcb != (OS_TCB *)0);
+    } while (p_tcb != DEF_NULL);
 }

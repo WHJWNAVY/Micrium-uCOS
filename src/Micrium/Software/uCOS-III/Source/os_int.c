@@ -10,15 +10,15 @@
 *
 * File    : OS_INT.C
 * By      : JJL
-* Version : V3.04.05
+* Version : V3.05.01
 *
 * LICENSING TERMS:
 * ---------------
-*           uC/OS-III is provided in source form for FREE short-term evaluation, for educational use or 
+*           uC/OS-III is provided in source form for FREE short-term evaluation, for educational use or
 *           for peaceful research.  If you plan or intend to use uC/OS-III in a commercial application/
-*           product then, you need to contact Micrium to properly license uC/OS-III for its use in your 
-*           application/product.   We provide ALL the source code for your convenience and to help you 
-*           experience uC/OS-III.  The fact that the source is provided does NOT mean that you can use 
+*           product then, you need to contact Micrium to properly license uC/OS-III for its use in your
+*           application/product.   We provide ALL the source code for your convenience and to help you
+*           experience uC/OS-III.  The fact that the source is provided does NOT mean that you can use
 *           it commercially without paying a licensing fee.
 *
 *           Knowledge of the source code may NOT be used to develop a similar product.
@@ -40,7 +40,7 @@ const  CPU_CHAR  *os_int__c = "$Id: $";
 #endif
 
 
-#if OS_CFG_ISR_POST_DEFERRED_EN > 0u
+#if (OS_CFG_ISR_POST_DEFERRED_EN == DEF_ENABLED)
 /*
 ************************************************************************************************************************
 *                                                   POST TO ISR QUEUE
@@ -85,7 +85,9 @@ const  CPU_CHAR  *os_int__c = "$Id: $";
 *
 * Returns    : none
 *
-* Note(s)    : none
+* Note(s)    : 1) This function is DEPRECATED and is not recommended for new designs. Deferred ISRs is a deprecated
+*                 feature of the kernel. It remains fully functional and supported but should not be used for
+*                 new applications.
 ************************************************************************************************************************
 */
 
@@ -101,35 +103,42 @@ void  OS_IntQPost (OS_OBJ_TYPE   type,
     CPU_SR_ALLOC();
 
 
+#if (OS_CFG_TS_EN == DEF_DISABLED)
+    (void)ts;                                                   /* Prevent compiler warning for not using 'ts'          */
+#endif
+
     CPU_CRITICAL_ENTER();
-    if (OSIntQNbrEntries < OSCfg_IntQSize) {                /* Make sure we haven't already filled the ISR queue      */
+    if (OSIntQNbrEntries < OSCfg_IntQSize) {                    /* Make sure we haven't already filled the ISR queue    */
         OSIntQNbrEntries++;
 
         if (OSIntQNbrEntriesMax < OSIntQNbrEntries) {
             OSIntQNbrEntriesMax = OSIntQNbrEntries;
         }
 
-        OSIntQInPtr->Type       = type;                     /* Save object type being posted                          */
-        OSIntQInPtr->ObjPtr     = p_obj;                    /* Save pointer to object being posted                    */
-        OSIntQInPtr->MsgPtr     = p_void;                   /* Save pointer to message if posting to a message queue  */
-        OSIntQInPtr->MsgSize    = msg_size;                 /* Save the message size   if posting to a message queue  */
-        OSIntQInPtr->Flags      = flags;                    /* Save the flags if posting to an event flag group       */
-        OSIntQInPtr->Opt        = opt;                      /* Save post options                                      */
-        OSIntQInPtr->TS         = ts;                       /* Save time stamp                                        */
+        OSIntQInPtr->Type       = type;                         /* Save object type being posted                        */
+        OSIntQInPtr->ObjPtr     = p_obj;                        /* Save pointer to object being posted                  */
+        OSIntQInPtr->MsgPtr     = p_void;                       /* Save pointer to message if posting to a message queue*/
+        OSIntQInPtr->MsgSize    = msg_size;                     /* Save the message size   if posting to a message queue*/
+        OSIntQInPtr->Flags      = flags;                        /* Save the flags if posting to an event flag group     */
+        OSIntQInPtr->Opt        = opt;                          /* Save post options                                    */
+#if (OS_CFG_TS_EN == DEF_ENABLED)
+        OSIntQInPtr->TS         = ts;                           /* Save time stamp                                      */
+#endif
 
-        OSIntQInPtr             =  OSIntQInPtr->NextPtr;    /* Point to the next interrupt handler queue entry        */
-
-        OSRdyList[0].NbrEntries = (OS_OBJ_QTY)1;            /* Make the interrupt handler task ready to run           */
+        OSIntQInPtr             = OSIntQInPtr->NextPtr;         /* Point to the next interrupt handler queue entry      */
+#if (OS_CFG_DBG_EN == DEF_ENABLED)
+        OSRdyList[0].NbrEntries = 1u;                           /* Make the interrupt handler task ready to run         */
+#endif
         OSRdyList[0].HeadPtr    = &OSIntQTaskTCB;
         OSRdyList[0].TailPtr    = &OSIntQTaskTCB;
-        OS_PrioInsert(0u);                                  /* Add task priority 0 in the priority table              */
-        if (OSPrioCur != 0) {                               /* Chk if OSIntQTask is not running                       */
-            OSPrioSaved         = OSPrioCur;                /* Save current priority                                  */
+        OS_PrioInsert(0u);                                      /* Add task priority 0 in the priority table            */
+        if (OSPrioCur != 0) {                                   /* Chk if OSIntQTask is not running                     */
+            OSPrioSaved         = OSPrioCur;                    /* Save current priority                                */
         }
 
        *p_err                   = OS_ERR_NONE;
     } else {
-        OSIntQOvfCtr++;                                     /* Count the number of ISR queue overflows                */
+        OSIntQOvfCtr++;                                         /* Count the number of ISR queue overflows              */
        *p_err                   = OS_ERR_INT_Q_FULL;
     }
     CPU_CRITICAL_EXIT();
@@ -146,98 +155,131 @@ void  OS_IntQPost (OS_OBJ_TYPE   type,
 * Arguments  : none
 *
 * Returns    : none
+*
+* Note(s)    : 1) This function is DEPRECATED, see OS_IntQPost() note 1 for details.
 ************************************************************************************************************************
 */
 
 void  OS_IntQRePost (void)
 {
-#if OS_CFG_TMR_EN > 0u
+#if (OS_CFG_TMR_EN == DEF_ENABLED)
     CPU_TS  ts;
 #endif
     OS_ERR  err;
 
 
-    switch (OSIntQOutPtr->Type) {                           /* Re-post to task                                        */
+    switch (OSIntQOutPtr->Type) {                               /* Re-post to task                                      */
         case OS_OBJ_TYPE_FLAG:
-#if OS_CFG_FLAG_EN > 0u
+#if (OS_CFG_FLAG_EN == DEF_ENABLED)
              (void)OS_FlagPost((OS_FLAG_GRP *) OSIntQOutPtr->ObjPtr,
-                               (OS_FLAGS     ) OSIntQOutPtr->Flags,
-                               (OS_OPT       ) OSIntQOutPtr->Opt,
-                               (CPU_TS       ) OSIntQOutPtr->TS,
-                               (OS_ERR      *)&err);
+                                OSIntQOutPtr->Flags,
+                                OSIntQOutPtr->Opt,
+#if (OS_CFG_TS_EN == DEF_ENABLED)
+                                OSIntQOutPtr->TS,
+#else
+                                0u,
+#endif
+                               &err);
 #endif
              break;
 
         case OS_OBJ_TYPE_Q:
-#if OS_CFG_Q_EN > 0u
-             OS_QPost((OS_Q      *) OSIntQOutPtr->ObjPtr,
-                      (void      *) OSIntQOutPtr->MsgPtr,
-                      (OS_MSG_SIZE) OSIntQOutPtr->MsgSize,
-                      (OS_OPT     ) OSIntQOutPtr->Opt,
-                      (CPU_TS     ) OSIntQOutPtr->TS,
-                      (OS_ERR    *)&err);
+#if (OS_CFG_Q_EN == DEF_ENABLED)
+             OS_QPost((OS_Q *) OSIntQOutPtr->ObjPtr,
+                       OSIntQOutPtr->MsgPtr,
+                       OSIntQOutPtr->MsgSize,
+                       OSIntQOutPtr->Opt,
+#if (OS_CFG_TS_EN == DEF_ENABLED)
+                        OSIntQOutPtr->TS,
+#else
+                        0u,
+#endif
+                      &err);
 #endif
              break;
 
         case OS_OBJ_TYPE_SEM:
-#if OS_CFG_SEM_EN > 0u
+#if (OS_CFG_SEM_EN == DEF_ENABLED)
              (void)OS_SemPost((OS_SEM *) OSIntQOutPtr->ObjPtr,
-                              (OS_OPT  ) OSIntQOutPtr->Opt,
-                              (CPU_TS  ) OSIntQOutPtr->TS,
-                              (OS_ERR *)&err);
+                               OSIntQOutPtr->Opt,
+#if (OS_CFG_TS_EN == DEF_ENABLED)
+                               OSIntQOutPtr->TS,
+#else
+                               0u,
+#endif
+                              &err);
 #endif
              break;
 
         case OS_OBJ_TYPE_TASK_MSG:
-#if OS_CFG_TASK_Q_EN > 0u
+#if (OS_CFG_TASK_Q_EN == DEF_ENABLED)
              OS_TaskQPost((OS_TCB    *) OSIntQOutPtr->ObjPtr,
                           (void      *) OSIntQOutPtr->MsgPtr,
-                          (OS_MSG_SIZE) OSIntQOutPtr->MsgSize,
-                          (OS_OPT     ) OSIntQOutPtr->Opt,
-                          (CPU_TS     ) OSIntQOutPtr->TS,
-                          (OS_ERR    *)&err);
+                           OSIntQOutPtr->MsgSize,
+                           OSIntQOutPtr->Opt,
+#if (OS_CFG_TS_EN == DEF_ENABLED)
+                           OSIntQOutPtr->TS,
+#else
+                           0u,
+#endif
+                          &err);
 #endif
              break;
 
         case OS_OBJ_TYPE_TASK_RESUME:
-#if OS_CFG_TASK_SUSPEND_EN > 0u
+#if (OS_CFG_TASK_SUSPEND_EN == DEF_ENABLED)
              (void)OS_TaskResume((OS_TCB *) OSIntQOutPtr->ObjPtr,
-                                 (OS_ERR *)&err);
+                                 &err);
 #endif
              break;
 
         case OS_OBJ_TYPE_TASK_SIGNAL:
              (void)OS_TaskSemPost((OS_TCB *) OSIntQOutPtr->ObjPtr,
-                                  (OS_OPT  ) OSIntQOutPtr->Opt,
-                                  (CPU_TS  ) OSIntQOutPtr->TS,
-                                  (OS_ERR *)&err);
+                                   OSIntQOutPtr->Opt,
+#if (OS_CFG_TS_EN == DEF_ENABLED)
+                                   OSIntQOutPtr->TS,
+#else
+                                   0u,
+#endif
+                                  &err);
              break;
 
         case OS_OBJ_TYPE_TASK_SUSPEND:
-#if OS_CFG_TASK_SUSPEND_EN > 0u
+#if (OS_CFG_TASK_SUSPEND_EN == DEF_ENABLED)
              (void)OS_TaskSuspend((OS_TCB *) OSIntQOutPtr->ObjPtr,
-                                  (OS_ERR *)&err);
+                                  &err);
 #endif
              break;
 
         case OS_OBJ_TYPE_TICK:
-#if OS_CFG_SCHED_ROUND_ROBIN_EN > 0u
+#if (OS_CFG_TASK_TICK_EN == DEF_ENABLED)
+#if (OS_CFG_SCHED_ROUND_ROBIN_EN == DEF_ENABLED)
              OS_SchedRoundRobin(&OSRdyList[OSPrioSaved]);
 #endif
 
-             (void)OS_TaskSemPost((OS_TCB *)&OSTickTaskTCB,                /* Signal tick task                        */
-                                  (OS_OPT  ) OS_OPT_POST_NONE,
-                                  (CPU_TS  ) OSIntQOutPtr->TS,
-                                  (OS_ERR *)&err);
-#if OS_CFG_TMR_EN > 0u
+             (void)OS_TaskSemPost((OS_TCB *)&OSTickTaskTCB,     /* Signal tick task                                     */
+                                   OS_OPT_POST_NONE,
+#if (OS_CFG_TS_EN == DEF_ENABLED)
+                                   OSIntQOutPtr->TS,
+#else
+                                   0u,
+#endif
+                                  &err);
+#endif
+
+#if (OS_CFG_TMR_EN == DEF_ENABLED)
              OSTmrUpdateCtr--;
-             if (OSTmrUpdateCtr == (OS_CTR)0u) {
+             if (OSTmrUpdateCtr == 0u) {
                  OSTmrUpdateCtr = OSTmrUpdateCnt;
-                 ts             = OS_TS_GET();                             /* Get timestamp                           */
-                 (void)OS_TaskSemPost((OS_TCB *)&OSTmrTaskTCB,             /* Signal timer task                       */
-                                      (OS_OPT  ) OS_OPT_POST_NONE,
-                                      (CPU_TS  ) ts,
-                                      (OS_ERR *)&err);
+#if (OS_CFG_TS_EN == DEF_ENABLED)
+                 ts             = OS_TS_GET();                  /* Get timestamp                                        */
+#else
+                 ts             = 0u;
+#endif
+                 (void)OS_TaskSemPost(&OSTmrTaskTCB,            /* Signal timer task                                    */
+                                       OS_OPT_POST_NONE,
+                                       ts,
+                                      &err);
              }
 #endif
              break;
@@ -258,41 +300,52 @@ void  OS_IntQRePost (void)
 *                        the argument is not used and will be a NULL pointer.
 *
 * Returns    : none
+*
+* Note(s)    : 1) This function is DEPRECATED, see OS_IntQPost() note 1 for details.
 ************************************************************************************************************************
 */
 
 void  OS_IntQTask (void  *p_arg)
 {
     CPU_BOOLEAN  done;
+#if (OS_CFG_TS_EN == DEF_ENABLED)
     CPU_TS       ts_start;
     CPU_TS       ts_end;
+#endif
     CPU_SR_ALLOC();
 
 
 
-    (void)&p_arg;                                           /* Not using 'p_arg', prevent compiler warning            */
+    (void)p_arg;                                                /* Not using 'p_arg', prevent compiler warning          */
+
     while (DEF_ON) {
         done = DEF_FALSE;
         while (done == DEF_FALSE) {
             CPU_CRITICAL_ENTER();
-            if (OSIntQNbrEntries == (OS_OBJ_QTY)0u) {
-                OSRdyList[0].NbrEntries = (OS_OBJ_QTY)0u;   /* Remove from ready list                                 */
-                OSRdyList[0].HeadPtr    = (OS_TCB   *)0;
-                OSRdyList[0].TailPtr    = (OS_TCB   *)0;
-                OS_PrioRemove(0u);                          /* Remove from the priority table                         */
+            if (OSIntQNbrEntries == 0u) {
+#if (OS_CFG_DBG_EN == DEF_ENABLED)
+                OSRdyList[0].NbrEntries = 0u;                   /* Remove from ready list                               */
+#endif
+                OSRdyList[0].HeadPtr    = DEF_NULL;
+                OSRdyList[0].TailPtr    = DEF_NULL;
+                OS_PrioRemove(0u);                              /* Remove from the priority table                       */
                 CPU_CRITICAL_EXIT();
                 OSSched();
-                done = DEF_TRUE;                            /* No more entries in the queue, we are done              */
+                done = DEF_TRUE;                                /* No more entries in the queue, we are done            */
             } else {
                 CPU_CRITICAL_EXIT();
+#if (OS_CFG_TS_EN == DEF_ENABLED)
                 ts_start = OS_TS_GET();
+#endif
                 OS_IntQRePost();
-                ts_end   = OS_TS_GET() - ts_start;          /* Measure execution time of tick task                    */
+#if (OS_CFG_TS_EN == DEF_ENABLED)
+                ts_end   = OS_TS_GET() - ts_start;              /* Measure execution time of tick task                  */
                 if (OSIntQTaskTimeMax < ts_end) {
                     OSIntQTaskTimeMax = ts_end;
                 }
+#endif
                 CPU_CRITICAL_ENTER();
-                OSIntQOutPtr = OSIntQOutPtr->NextPtr;       /* Point to next item in the ISR queue                    */
+                OSIntQOutPtr = OSIntQOutPtr->NextPtr;           /* Point to next item in the ISR queue                  */
                 OSIntQNbrEntries--;
                 CPU_CRITICAL_EXIT();
             }
@@ -319,7 +372,7 @@ void  OS_IntQTask (void  *p_arg)
 *
 * Returns    : none
 *
-* Note(s)    : none
+* Note(s)    : 1) This function is DEPRECATED, see OS_IntQPost() note 1 for details.
 ************************************************************************************************************************
 */
 
@@ -330,30 +383,32 @@ void  OS_IntQTaskInit (OS_ERR  *p_err)
     OS_OBJ_QTY     i;
 
 
-    OSIntQOvfCtr = (OS_QTY)0u;                              /* Clear the ISR queue overflow counter                   */
+    OSIntQOvfCtr = 0u;                                          /* Clear the ISR queue overflow counter                 */
 
-    if (OSCfg_IntQBasePtr == (OS_INT_Q *)0) {
+    if (OSCfg_IntQBasePtr == DEF_NULL) {
        *p_err = OS_ERR_INT_Q;
         return;
     }
 
-    if (OSCfg_IntQSize < (OS_OBJ_QTY)2u) {
+    if (OSCfg_IntQSize < 2u) {
        *p_err = OS_ERR_INT_Q_SIZE;
         return;
     }
 
-    OSIntQTaskTimeMax = (CPU_TS)0;
+#if (OS_CFG_TS_EN == DEF_ENABLED)
+    OSIntQTaskTimeMax = 0u;
+#endif
 
-    p_int_q           = OSCfg_IntQBasePtr;                  /* Initialize the circular ISR queue                      */
+    p_int_q           = OSCfg_IntQBasePtr;                      /* Initialize the circular ISR queue                    */
     p_int_q_next      = p_int_q;
     p_int_q_next++;
     for (i = 0u; i < OSCfg_IntQSize; i++) {
         p_int_q->Type    =  OS_OBJ_TYPE_NONE;
-        p_int_q->ObjPtr  = (void      *)0;
-        p_int_q->MsgPtr  = (void      *)0;
-        p_int_q->MsgSize = (OS_MSG_SIZE)0u;
-        p_int_q->Flags   = (OS_FLAGS   )0u;
-        p_int_q->Opt     = (OS_OPT     )0u;
+        p_int_q->ObjPtr  = DEF_NULL;
+        p_int_q->MsgPtr  = DEF_NULL;
+        p_int_q->MsgSize = 0u;
+        p_int_q->Flags   = 0u;
+        p_int_q->Opt     = 0u;
         p_int_q->NextPtr = p_int_q_next;
         p_int_q++;
         p_int_q_next++;
@@ -363,11 +418,11 @@ void  OS_IntQTaskInit (OS_ERR  *p_err)
     p_int_q->NextPtr    = p_int_q_next;
     OSIntQInPtr         = p_int_q_next;
     OSIntQOutPtr        = p_int_q_next;
-    OSIntQNbrEntries    = (OS_OBJ_QTY)0u;
-    OSIntQNbrEntriesMax = (OS_OBJ_QTY)0u;
+    OSIntQNbrEntries    = 0u;
+    OSIntQNbrEntriesMax = 0u;
 
-                                                            /* -------------- CREATE THE ISR QUEUE TASK ------------- */
-    if (OSCfg_IntQTaskStkBasePtr == (CPU_STK *)0) {
+                                                                /* ------------ CREATE THE ISR QUEUE TASK ------------- */
+    if (OSCfg_IntQTaskStkBasePtr == DEF_NULL) {
        *p_err = OS_ERR_INT_Q_STK_INVALID;
         return;
     }
@@ -377,19 +432,19 @@ void  OS_IntQTaskInit (OS_ERR  *p_err)
         return;
     }
 
-    OSTaskCreate((OS_TCB     *)&OSIntQTaskTCB,
+    OSTaskCreate(&OSIntQTaskTCB,
                  (CPU_CHAR   *)((void *)"uC/OS-III ISR Queue Task"),
-                 (OS_TASK_PTR )OS_IntQTask,
-                 (void       *)0,
-                 (OS_PRIO     )0u,                          /* This task is ALWAYS at priority '0' (i.e. highest)     */
-                 (CPU_STK    *)OSCfg_IntQTaskStkBasePtr,
-                 (CPU_STK_SIZE)OSCfg_IntQTaskStkLimit,
-                 (CPU_STK_SIZE)OSCfg_IntQTaskStkSize,
-                 (OS_MSG_QTY  )0u,
-                 (OS_TICK     )0u,
-                 (void       *)0,
-                 (OS_OPT      )(OS_OPT_TASK_STK_CHK | OS_OPT_TASK_STK_CLR),
-                 (OS_ERR     *)p_err);
+                  OS_IntQTask,
+                  DEF_NULL,
+                  0u,                                           /* This task is ALWAYS at priority '0' (i.e. highest)   */
+                  OSCfg_IntQTaskStkBasePtr,
+                  OSCfg_IntQTaskStkLimit,
+                  OSCfg_IntQTaskStkSize,
+                  0u,
+                  0u,
+                  DEF_NULL,
+                 (OS_OPT_TASK_STK_CHK | OS_OPT_TASK_STK_CLR),
+                  p_err);
 }
 
 #endif

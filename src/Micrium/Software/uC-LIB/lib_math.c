@@ -3,7 +3,7 @@
 *                                                uC/LIB
 *                                        CUSTOM LIBRARY MODULES
 *
-*                         (c) Copyright 2004-2015; Micrium, Inc.; Weston, FL
+*                         (c) Copyright 2004-2014; Micrium, Inc.; Weston, FL
 *
 *                  All rights reserved.  Protected by international copyright laws.
 *
@@ -16,9 +16,9 @@
 *                  software available.  Your honesty is greatly appreciated.
 *
 *                  You can find our product's user manual, API reference, release notes and
-*                  more information at: doc.micrium.com
+*                  more information at: https://doc.micrium.com
 *
-*                  You can contact us at: www.micrium.com
+*                  You can contact us at: http://www.micrium.com
 *********************************************************************************************************
 */
 
@@ -28,7 +28,7 @@
 *                                        MATHEMATIC OPERATIONS
 *
 * Filename      : lib_math.c
-* Version       : V1.38.02
+* Version       : V1.38.01
 * Programmer(s) : SR
 *                 ITJ
 *********************************************************************************************************

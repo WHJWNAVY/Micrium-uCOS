@@ -1,34 +1,35 @@
 /*
-*********************************************************************************************************
-*                                                uC/OS-III
-*                                          The Real-Time Kernel
+************************************************************************************************************************
+*                                                      uC/OS-III
+*                                                 The Real-Time Kernel
 *
-*                         (c) Copyright 2009-2018; Silicon Laboratories Inc.,
-*                                400 W. Cesar Chavez, Austin, TX 78701
+*                                  (c) Copyright 2009-2015; Micrium, Inc.; Weston, FL
+*                           All rights reserved.  Protected by international copyright laws.
 *
-*                   All rights reserved. Protected by international copyright laws.
+*                                                    CORE FUNCTIONS
 *
-*                  Your use of this software is subject to your acceptance of the terms
-*                  of a Silicon Labs Micrium software license, which can be obtained by
-*                  contacting info@micrium.com. If you do not agree to the terms of this
-*                  license, you may not use this software.
+* File    : OS_CORE.C
+* By      : JJL
+* Version : V3.05.01
 *
-*                  Please help us continue to provide the Embedded community with the finest
-*                  software available. Your honesty is greatly appreciated.
+* LICENSING TERMS:
+* ---------------
+*           uC/OS-III is provided in source form for FREE short-term evaluation, for educational use or
+*           for peaceful research.  If you plan or intend to use uC/OS-III in a commercial application/
+*           product then, you need to contact Micrium to properly license uC/OS-III for its use in your
+*           application/product.   We provide ALL the source code for your convenience and to help you
+*           experience uC/OS-III.  The fact that the source is provided does NOT mean that you can use
+*           it commercially without paying a licensing fee.
 *
-*                    You can find our product's documentation at: doc.micrium.com
+*           Knowledge of the source code may NOT be used to develop a similar product.
 *
-*                          For more information visit us at: www.micrium.com
-*********************************************************************************************************
-*/
-
-/*
-*********************************************************************************************************
-*                                            CORE FUNCTIONS
+*           Please help us continue to provide the embedded community with the finest software available.
+*           Your honesty is greatly appreciated.
 *
-* File    : os_cfg_app.c
-* Version : V3.07.03
-*********************************************************************************************************
+*           You can find our product's user manual, API reference, release notes and
+*           more information at https://doc.micrium.com.
+*           You can contact us at www.micrium.com.
+************************************************************************************************************************
 */
 
 #define  MICRIUM_SOURCE
@@ -63,7 +64,7 @@ void  OSInit (OS_ERR  *p_err)
 
 
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return;
     }
@@ -71,26 +72,29 @@ void  OSInit (OS_ERR  *p_err)
 
     OSInitHook();                                               /* Call port specific initialization code               */
 
-    OSIntNestingCtr       =           0u;                       /* Clear the interrupt nesting counter                  */
+    OSIntNestingCtr       = 0u;                                 /* Clear the interrupt nesting counter                  */
 
-    OSRunning             =  OS_STATE_OS_STOPPED;               /* Indicate that multitasking has not started           */
+    OSRunning             = OS_STATE_OS_STOPPED;                /* Indicate that multitasking not started               */
 
-    OSSchedLockNestingCtr =           0u;                       /* Clear the scheduling lock counter                    */
+    OSSchedLockNestingCtr = 0u;                                 /* Clear the scheduling lock counter                    */
 
-    OSTCBCurPtr           = (OS_TCB *)0;                        /* Initialize OS_TCB pointers to a known state          */
-    OSTCBHighRdyPtr       = (OS_TCB *)0;
+    OSTCBCurPtr           = DEF_NULL;                           /* Initialize OS_TCB pointers to a known state          */
+    OSTCBHighRdyPtr       = DEF_NULL;
 
-    OSPrioCur             =           0u;                       /* Initialize priority variables to a known state       */
-    OSPrioHighRdy         =           0u;
+    OSPrioCur             = 0u;                                 /* Initialize priority variables to a known state       */
+    OSPrioHighRdy         = 0u;
+#if (OS_CFG_ISR_POST_DEFERRED_EN == DEF_ENABLED)
+    OSPrioSaved           = 0u;
+#endif
 
 #if (OS_CFG_SCHED_LOCK_TIME_MEAS_EN == DEF_ENABLED)
-    OSSchedLockTimeBegin  =           0u;
-    OSSchedLockTimeMax    =           0u;
-    OSSchedLockTimeMaxCur =           0u;
+    OSSchedLockTimeBegin  = 0u;
+    OSSchedLockTimeMax    = 0u;
+    OSSchedLockTimeMaxCur = 0u;
 #endif
 
 #ifdef OS_SAFETY_CRITICAL_IEC61508
-    OSSafetyCriticalStartFlag = DEF_FALSE;
+    OSSafetyCriticalStartFlag       =  DEF_FALSE;
 #endif
 
 #if (OS_CFG_SCHED_ROUND_ROBIN_EN == DEF_ENABLED)
@@ -100,7 +104,7 @@ void  OSInit (OS_ERR  *p_err)
 
 #if (OS_CFG_ISR_STK_SIZE > 0u)
     p_stk = OSCfg_ISRStkBasePtr;                                /* Clear exception stack for stack checking.            */
-    if (p_stk != (CPU_STK *)0) {
+    if (p_stk != DEF_NULL) {
         size  = OSCfg_ISRStkSize;
         while (size > 0u) {
             size--;
@@ -115,20 +119,20 @@ void  OSInit (OS_ERR  *p_err)
 
 #if (OS_CFG_APP_HOOKS_EN == DEF_ENABLED)                        /* Clear application hook pointers                      */
 #if (OS_CFG_TASK_STK_REDZONE_EN == DEF_ENABLED)
-    OS_AppRedzoneHitHookPtr = (OS_APP_HOOK_TCB )0;
+    OS_AppRedzoneHitHookPtr = DEF_NULL;
 #endif
-    OS_AppTaskCreateHookPtr = (OS_APP_HOOK_TCB )0;
-    OS_AppTaskDelHookPtr    = (OS_APP_HOOK_TCB )0;
-    OS_AppTaskReturnHookPtr = (OS_APP_HOOK_TCB )0;
+    OS_AppTaskCreateHookPtr = DEF_NULL;
+    OS_AppTaskDelHookPtr    = DEF_NULL;
+    OS_AppTaskReturnHookPtr = DEF_NULL;
 
-    OS_AppIdleTaskHookPtr   = (OS_APP_HOOK_VOID)0;
-    OS_AppStatTaskHookPtr   = (OS_APP_HOOK_VOID)0;
-    OS_AppTaskSwHookPtr     = (OS_APP_HOOK_VOID)0;
-    OS_AppTimeTickHookPtr   = (OS_APP_HOOK_VOID)0;
+    OS_AppIdleTaskHookPtr   = DEF_NULL;
+    OS_AppStatTaskHookPtr   = DEF_NULL;
+    OS_AppTaskSwHookPtr     = DEF_NULL;
+    OS_AppTimeTickHookPtr   = DEF_NULL;
 #endif
 
 #if (OS_CFG_TASK_REG_TBL_SIZE > 0u)
-    OSTaskRegNextAvailID = 0u;
+    OSTaskRegNextAvailID    = 0u;
 #endif
 
     OS_PrioInit();                                              /* Initialize the priority bitmap table                 */
@@ -138,8 +142,8 @@ void  OSInit (OS_ERR  *p_err)
 
 #if (OS_CFG_FLAG_EN == DEF_ENABLED)                             /* Initialize the Event Flag module                     */
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
-    OSFlagDbgListPtr = (OS_FLAG_GRP *)0;
-    OSFlagQty        =                0u;
+    OSFlagDbgListPtr = DEF_NULL;
+    OSFlagQty        = 0u;
 #endif
 #endif
 
@@ -161,24 +165,24 @@ void  OSInit (OS_ERR  *p_err)
 
 #if (OS_CFG_MUTEX_EN == DEF_ENABLED)                            /* Initialize the Mutex Manager module                  */
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
-    OSMutexDbgListPtr = (OS_MUTEX *)0;
-    OSMutexQty        =             0u;
+    OSMutexDbgListPtr = DEF_NULL;
+    OSMutexQty        = 0u;
 #endif
 #endif
 
 
 #if (OS_CFG_Q_EN == DEF_ENABLED)                                /* Initialize the Message Queue Manager module          */
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
-    OSQDbgListPtr = (OS_Q *)0;
-    OSQQty        =         0u;
+    OSQDbgListPtr = DEF_NULL;
+    OSQQty        = 0u;
 #endif
 #endif
 
 
 #if (OS_CFG_SEM_EN == DEF_ENABLED)                              /* Initialize the Semaphore Manager module              */
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
-    OSSemDbgListPtr = (OS_SEM *)0;
-    OSSemQty        =           0u;
+    OSSemDbgListPtr = DEF_NULL;
+    OSSemQty        = 0u;
 #endif
 #endif
 
@@ -197,6 +201,14 @@ void  OSInit (OS_ERR  *p_err)
     }
 
 
+#if (OS_CFG_ISR_POST_DEFERRED_EN == DEF_ENABLED)
+    OS_IntQTaskInit(p_err);                                     /* Initialize the Interrupt Queue Handler Task          */
+    if (*p_err != OS_ERR_NONE) {
+        return;
+    }
+#endif
+
+
 #if (OS_CFG_TASK_IDLE_EN == DEF_ENABLED)
     OS_IdleTaskInit(p_err);                                     /* Initialize the Idle Task                             */
     if (*p_err != OS_ERR_NONE) {
@@ -205,8 +217,8 @@ void  OSInit (OS_ERR  *p_err)
 #endif
 
 
-#if (OS_CFG_TICK_EN == DEF_ENABLED)
-    OS_TickInit(p_err);
+#if (OS_CFG_TASK_TICK_EN == DEF_ENABLED)
+    OS_TickTaskInit(p_err);                                     /* Initialize the Tick Task                             */
     if (*p_err != OS_ERR_NONE) {
         return;
     }
@@ -270,8 +282,6 @@ void  OSInit (OS_ERR  *p_err)
 
 void  OSIntEnter (void)
 {
-    OS_TRACE_ISR_ENTER();
-
     if (OSRunning != OS_STATE_OS_RUNNING) {                     /* Is OS running?                                       */
         return;                                                 /* No                                                   */
     }
@@ -314,25 +324,21 @@ void  OSIntExit (void)
 
 
     if (OSRunning != OS_STATE_OS_RUNNING) {                     /* Has the OS started?                                  */
-        OS_TRACE_ISR_EXIT();
         return;                                                 /* No                                                   */
     }
 
     CPU_INT_DIS();
     if (OSIntNestingCtr == 0u) {                                /* Prevent OSIntNestingCtr from wrapping                */
-        OS_TRACE_ISR_EXIT();
         CPU_INT_EN();
         return;
     }
     OSIntNestingCtr--;
     if (OSIntNestingCtr > 0u) {                                 /* ISRs still nested?                                   */
-        OS_TRACE_ISR_EXIT();
         CPU_INT_EN();                                           /* Yes                                                  */
         return;
     }
 
     if (OSSchedLockNestingCtr > 0u) {                           /* Scheduler still locked?                              */
-        OS_TRACE_ISR_EXIT();
         CPU_INT_EN();                                           /* Yes                                                  */
         return;
     }
@@ -342,7 +348,7 @@ void  OSIntExit (void)
 #if (OS_CFG_TASK_STK_REDZONE_EN == DEF_ENABLED)
     stk_status = OS_TaskStkRedzoneChk(OSCfg_ISRStkBasePtr, OSCfg_ISRStkSize);
     if (stk_status != DEF_OK) {
-        OSRedzoneHitHook((OS_TCB *)0);
+        OSRedzoneHitHook(DEF_NULL);
     }
 #endif
 #endif
@@ -351,26 +357,20 @@ void  OSIntExit (void)
 #if (OS_CFG_TASK_IDLE_EN == DEF_ENABLED)
     OSTCBHighRdyPtr = OSRdyList[OSPrioHighRdy].HeadPtr;         /* Get highest priority task ready-to-run               */
     if (OSTCBHighRdyPtr == OSTCBCurPtr) {                       /* Current task still the highest priority?             */
-                                                                /* Yes                                                  */
 #if (OS_CFG_TASK_STK_REDZONE_EN == DEF_ENABLED)
-        stk_status = OSTaskStkRedzoneChk((OS_TCB *)0);
+        stk_status = OSTaskStkRedzoneChk(DEF_NULL);
         if (stk_status != DEF_OK) {
             OSRedzoneHitHook(OSTCBCurPtr);
         }
 #endif
-        OS_TRACE_ISR_EXIT();
-        CPU_INT_EN();
-        OS_TRACE_TASK_SWITCHED_IN(OSTCBHighRdyPtr);             /* Do this here because we don't execute OSIntCtxSw().  */
+        CPU_INT_EN();                                           /* Yes                                                  */
         return;
     }
 #else
-    if (OSPrioHighRdy != (OS_CFG_PRIO_MAX - 1u)) {              /* Are we returning to idle?                            */
-        OSTCBHighRdyPtr = OSRdyList[OSPrioHighRdy].HeadPtr;     /* No ... get highest priority task ready-to-run        */
-        if (OSTCBHighRdyPtr == OSTCBCurPtr) {                   /* Current task still the highest priority?             */
-                                                                /* Yes                                                  */
-            OS_TRACE_ISR_EXIT();
-            CPU_INT_EN();
-            OS_TRACE_TASK_SWITCHED_IN(OSTCBHighRdyPtr);         /* Do this here because we don't execute OSIntCtxSw().  */
+    if (OSPrioHighRdy != (OS_CFG_PRIO_MAX - 1u)) {              /* Are we returning to idle?                              */
+        OSTCBHighRdyPtr = OSRdyList[OSPrioHighRdy].HeadPtr;     /* No ... get highest priority task ready-to-run          */
+        if (OSTCBHighRdyPtr == OSTCBCurPtr) {                   /* Current task still the highest priority?               */
+            CPU_INT_EN();                                       /* Yes                                                    */
             return;
         }
     }
@@ -386,8 +386,6 @@ void  OSIntExit (void)
 #if defined(OS_CFG_TLS_TBL_SIZE) && (OS_CFG_TLS_TBL_SIZE > 0u)
     OS_TLS_TaskSw();
 #endif
-
-    OS_TRACE_ISR_EXIT_TO_SCHEDULER();
 
     OSIntCtxSw();                                               /* Perform interrupt level ctx switch                   */
 
@@ -495,7 +493,7 @@ void  OSSched (void)
     } else {
         OSTCBHighRdyPtr = OSTCBCurPtr;
         CPU_INT_EN();
-        for (;;) {
+        while (DEF_ON) {
 #if ((OS_CFG_DBG_EN == DEF_ENABLED) || (OS_CFG_STAT_TASK_EN == DEF_ENABLED))
             CPU_CRITICAL_ENTER();
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
@@ -551,7 +549,7 @@ void  OSSchedLock (OS_ERR  *p_err)
 
 
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return;
     }
@@ -612,7 +610,7 @@ void  OSSchedUnlock (OS_ERR  *p_err)
 
 
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return;
     }
@@ -661,7 +659,7 @@ void  OSSchedUnlock (OS_ERR  *p_err)
 *
 * Arguments  : en                determines whether round-robin will be enabled (when DEF_EN) or not (when DEF_DIS)
 *
-*              dflt_time_quanta  default number of ticks between time slices.  0 means OSCfg_TickRate_Hz / 10.
+*              dflt_time_quanta  default number of ticks between time slices.  0 means assumes OSCfg_TickRate_Hz / 10.
 *
 *              p_err             is a pointer to a variable that will contain an error code returned by this function.
 *
@@ -669,7 +667,7 @@ void  OSSchedUnlock (OS_ERR  *p_err)
 *
 * Returns    : none
 *
-* Note(s)    : none
+* Note(s)    :
 ************************************************************************************************************************
 */
 
@@ -683,7 +681,7 @@ void  OSSchedRoundRobinCfg (CPU_BOOLEAN   en,
 
 
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return;
     }
@@ -711,7 +709,7 @@ void  OSSchedRoundRobinCfg (CPU_BOOLEAN   en,
 ************************************************************************************************************************
 *                                    YIELD CPU WHEN TASK NO LONGER NEEDS THE TIME SLICE
 *
-* Description: This function is called to give up the CPU when a task is done executing before its time slice expires.
+* Description: This function is called to give up the CPU when it is done executing before its time slice expires.
 *
 * Argument(s): p_err      is a pointer to a variable that will contain an error code returned by this function.
 *
@@ -737,7 +735,7 @@ void  OSSchedRoundRobinYield (OS_ERR  *p_err)
 
 
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return;
     }
@@ -788,7 +786,7 @@ void  OSSchedRoundRobinYield (OS_ERR  *p_err)
 ************************************************************************************************************************
 *                                                 START MULTITASKING
 *
-* Description: This function is used to start the multitasking process which lets uC/OS-III manage the task that you
+* Description: This function is used to start the multitasking process which lets uC/OS-III manages the task that you
 *              created.  Before you can call OSStart(), you MUST have called OSInit() and you MUST have created at least
 *              one application task.
 *
@@ -816,7 +814,7 @@ void  OSStart (OS_ERR  *p_err)
 
 
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return;
     }
@@ -829,6 +827,9 @@ void  OSStart (OS_ERR  *p_err)
 
     kernel_task_cnt = 0u;                                       /* Calculate the number of kernel tasks                 */
 #if (OS_CFG_STAT_TASK_EN == DEF_ENABLED)
+    kernel_task_cnt++;
+#endif
+#if (OS_CFG_TASK_TICK_EN  == DEF_ENABLED)
     kernel_task_cnt++;
 #endif
 #if (OS_CFG_TMR_EN == DEF_ENABLED)
@@ -844,15 +845,15 @@ void  OSStart (OS_ERR  *p_err)
     }
 
     if (OSRunning == OS_STATE_OS_STOPPED) {
-        OSPrioHighRdy   = OS_PrioGetHighest();                  /* Find the highest priority                            */
-        OSPrioCur       = OSPrioHighRdy;
-        OSTCBHighRdyPtr = OSRdyList[OSPrioHighRdy].HeadPtr;
-        OSTCBCurPtr     = OSTCBHighRdyPtr;
-        OSRunning       = OS_STATE_OS_RUNNING;
+        OSPrioHighRdy             = OS_PrioGetHighest();        /* Find the highest priority                            */
+        OSPrioCur                 = OSPrioHighRdy;
+        OSTCBHighRdyPtr           = OSRdyList[OSPrioHighRdy].HeadPtr;
+        OSTCBCurPtr               = OSTCBHighRdyPtr;
+        OSRunning                 = OS_STATE_OS_RUNNING;
         OSStartHighRdy();                                       /* Execute target specific code to start task           */
-       *p_err           = OS_ERR_FATAL_RETURN;                  /* OSStart() is not supposed to return                  */
+       *p_err                     = OS_ERR_FATAL_RETURN;        /* OSStart() is not supposed to return                  */
     } else {
-       *p_err           = OS_ERR_OS_RUNNING;                    /* OS is already running                                */
+       *p_err                     = OS_ERR_OS_RUNNING;          /* OS is already running                                */
     }
 }
 
@@ -878,7 +879,7 @@ void  OSStart (OS_ERR  *p_err)
 CPU_INT16U  OSVersion (OS_ERR  *p_err)
 {
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return (0u);
     }
@@ -920,7 +921,7 @@ void  OS_IdleTask (void  *p_arg)
 
     (void)p_arg;                                                /* Prevent compiler warning for not using 'p_arg'       */
 
-    for (;;) {
+    while (DEF_ON) {
 #if ((OS_CFG_DBG_EN == DEF_ENABLED) || (OS_CFG_STAT_TASK_EN == DEF_ENABLED))
         CPU_CRITICAL_ENTER();
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
@@ -960,21 +961,17 @@ void  OS_IdleTaskInit (OS_ERR  *p_err)
 #endif
                                                                 /* --------------- CREATE THE IDLE TASK --------------- */
     OSTaskCreate(&OSIdleTaskTCB,
-#if  (OS_CFG_DBG_EN == DEF_DISABLED)
-                 (CPU_CHAR   *)0,
-#else
-                 (CPU_CHAR   *)"uC/OS-III Idle Task",
-#endif
+                 (CPU_CHAR   *)((void *)"uC/OS-III Idle Task"),
                   OS_IdleTask,
-                 (void       *)0,
-                 (OS_PRIO     )(OS_CFG_PRIO_MAX - 1u),
+                  DEF_NULL,
+                 (OS_CFG_PRIO_MAX - 1u),
                   OSCfg_IdleTaskStkBasePtr,
                   OSCfg_IdleTaskStkLimit,
                   OSCfg_IdleTaskStkSize,
                   0u,
                   0u,
-                 (void       *)0,
-                 (OS_OPT_TASK_STK_CHK | (OS_OPT)(OS_OPT_TASK_STK_CLR | OS_OPT_TASK_NO_TLS)),
+                  DEF_NULL,
+                 (OS_OPT_TASK_STK_CHK | OS_OPT_TASK_STK_CLR | OS_OPT_TASK_NO_TLS),
                   p_err);
 }
 #endif
@@ -984,19 +981,19 @@ void  OS_IdleTaskInit (OS_ERR  *p_err)
 *                                             BLOCK A TASK PENDING ON EVENT
 *
 * Description: This function is called to place a task in the blocked state waiting for an event to occur. This function
-*              exists because it is common to a number of OSxxxPend() services.
+*              exist because it is common to a number of OSxxxPend() services.
 *
-* Arguments  : p_obj          is a pointer to the object to pend on.  If there are no object used to pend on then
+* Arguments  : p_pend_data    is a pointer to an object used to link the task being blocked to the list of task(s)
+*              -----------    pending on the desired object.
+
+*              p_obj          is a pointer to the object to pend on.  If there are no object used to pend on then
 *              -----          the caller must pass a NULL pointer.
-*
-*              p_tcb          is the task that will be blocked.
 *
 *              pending_on     Specifies what the task will be pending on:
 *
 *                                 OS_TASK_PEND_ON_FLAG
 *                                 OS_TASK_PEND_ON_TASK_Q     <- No object (pending for a message sent to the task)
 *                                 OS_TASK_PEND_ON_MUTEX
-*                                 OS_TASK_PEND_ON_COND
 *                                 OS_TASK_PEND_ON_Q
 *                                 OS_TASK_PEND_ON_SEM
 *                                 OS_TASK_PEND_ON_TASK_SEM   <- No object (pending on a signal sent to the task)
@@ -1009,51 +1006,55 @@ void  OS_IdleTaskInit (OS_ERR  *p_err)
 ************************************************************************************************************************
 */
 
-void  OS_Pend (OS_PEND_OBJ  *p_obj,
-               OS_TCB       *p_tcb,
-               OS_STATE      pending_on,
-               OS_TICK       timeout)
+void  OS_Pend (OS_PEND_DATA  *p_pend_data,
+               OS_PEND_OBJ   *p_obj,
+               OS_STATE       pending_on,
+               OS_TICK        timeout)
 {
     OS_PEND_LIST  *p_pend_list;
 
 
-    p_tcb->PendOn     = pending_on;                             /* Resource not available, wait until it is             */
-    p_tcb->PendStatus = OS_STATUS_PEND_OK;
 
-    OS_TaskBlock(p_tcb,                                         /* Block the task and add it to the tick list if needed */
+    OSTCBCurPtr->PendOn     = pending_on;                       /* Resource not available, wait until it is             */
+    OSTCBCurPtr->PendStatus = OS_STATUS_PEND_OK;
+
+    OS_TaskBlock(OSTCBCurPtr,                                   /* Block the task and add it to the tick list if needed */
                  timeout);
 
-    if (p_obj != (OS_PEND_OBJ *)0) {                            /* Add the current task to the pend list ...            */
+    if (p_obj != DEF_NULL) {                                    /* Add the current task to the pend list ...            */
         p_pend_list             = &p_obj->PendList;             /* ... if there is an object to pend on                 */
-        p_tcb->PendObjPtr =  p_obj;                             /* Save the pointer to the object pending on            */
+        p_pend_data->PendObjPtr = p_obj;                        /* Save the pointer to the object pending on            */
+        OS_PendDataInit(OSTCBCurPtr,                            /* Initialize the remaining field                       */
+                        p_pend_data,
+                        1u);
         OS_PendListInsertPrio(p_pend_list,                      /* Insert in the pend list in priority order            */
-                              p_tcb);
-
+                              p_pend_data);
     } else {
-        p_tcb->PendObjPtr = (OS_PEND_OBJ *)0;                   /* If no object being pended on, clear the pend object  */
+#if (OS_CFG_PEND_MULTI_EN == DEF_ENABLED)
+        OSTCBCurPtr->PendDataTblEntries = 0u;                   /* If no object being pended on the clear these fields  */
+#endif
+        OSTCBCurPtr->PendDataTblPtr     = DEF_NULL;             /* ... in the TCB                                       */
     }
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
     OS_PendDbgNameAdd(p_obj,
-                      p_tcb);
+                      OSTCBCurPtr);
 #endif
 }
 
 
 /*
 ************************************************************************************************************************
-*                                                    CANCEL PENDING
+*                                                     ABORT PENDING
 *
-* Description: This function is called by the OSxxxPendAbort() and OSxxxDel() functions to cancel pending on an event.
+* Description: This function is called by OSxxxPendAbort() functions to abort pending on an event.
 *
-* Arguments  : p_tcb          Is a pointer to the OS_TCB of the task that we'll abort the pend for
+* Arguments  : p_obj          Is a pointer to the object to pend abort.
 *              -----
 *
-*              ts             Is a timestamp as to when the pend was cancelled
+*              p_tcb          Is a pointer to the OS_TCB of the task that we'll abort the pend for
+*              -----
 *
-*              reason         Indicates how the task was readied:
-*
-*                                 OS_STATUS_PEND_DEL       Object pended on was deleted.
-*                                 OS_STATUS_PEND_ABORT     Pend was aborted.
+*              ts             The is a timestamp as to when the pend abort occurred
 *
 * Returns    : none
 *
@@ -1061,9 +1062,9 @@ void  OS_Pend (OS_PEND_OBJ  *p_obj,
 ************************************************************************************************************************
 */
 
-void  OS_PendAbort (OS_TCB     *p_tcb,
-                    CPU_TS      ts,
-                    OS_STATUS   reason)
+void  OS_PendAbort (OS_PEND_OBJ  *p_obj,
+                    OS_TCB       *p_tcb,
+                    CPU_TS        ts)
 {
 #if (OS_CFG_TS_EN == DEF_DISABLED)
     (void)ts;                                                   /* Prevent compiler warning for not using 'ts'          */
@@ -1072,55 +1073,232 @@ void  OS_PendAbort (OS_TCB     *p_tcb,
     switch (p_tcb->TaskState) {
         case OS_TASK_STATE_PEND:
         case OS_TASK_STATE_PEND_TIMEOUT:
+#if (OS_CFG_PEND_MULTI_EN == DEF_ENABLED)
+             if (p_tcb->PendOn == OS_TASK_PEND_ON_MULTI) {
+                 OS_PendAbort1(p_obj,                           /* Indicate which object was pend aborted               */
+                               p_tcb,
+                               ts);
+             }
+#endif
 #if (OS_MSG_EN == DEF_ENABLED)
-             p_tcb->MsgPtr     = (void *)0;
-             p_tcb->MsgSize    =         0u;
+             p_tcb->MsgPtr     = DEF_NULL;
+             p_tcb->MsgSize    = 0u;
 #endif
 #if (OS_CFG_TS_EN == DEF_ENABLED)
              p_tcb->TS         = ts;
 #endif
-             OS_PendListRemove(p_tcb);                          /* Remove task from the pend list                       */
-
-#if (OS_CFG_TICK_EN == DEF_ENABLED)
+             if (p_obj != DEF_NULL) {
+                 OS_PendListRemove(p_tcb);                      /* Remove task from all pend lists                      */
+             }
+#if (OS_CFG_TASK_TICK_EN == DEF_ENABLED)
              if (p_tcb->TaskState == OS_TASK_STATE_PEND_TIMEOUT) {
-                 OS_TickListRemove(p_tcb);                      /* Cancel the timeout                                   */
+                 OS_TickListRemove(p_tcb);                      /* Remove from tick list                                */
              }
 #endif
              OS_RdyListInsert(p_tcb);                           /* Insert the task in the ready list                    */
              p_tcb->TaskState  = OS_TASK_STATE_RDY;             /* Task will be ready                                   */
-             p_tcb->PendStatus = reason;                        /* Indicate how the task became ready                   */
+             p_tcb->PendStatus = OS_STATUS_PEND_ABORT;          /* Indicate pend was aborted                            */
              p_tcb->PendOn     = OS_TASK_PEND_ON_NOTHING;       /* Indicate no longer pending                           */
              break;
 
         case OS_TASK_STATE_PEND_SUSPENDED:
         case OS_TASK_STATE_PEND_TIMEOUT_SUSPENDED:
+#if (OS_CFG_PEND_MULTI_EN == DEF_ENABLED)
+             if (p_tcb->PendOn == OS_TASK_PEND_ON_MULTI) {
+                 OS_PendAbort1(p_obj,                           /* Indicate which object was pend aborted               */
+                               p_tcb,
+                               ts);
+             }
+#endif
 #if (OS_MSG_EN == DEF_ENABLED)
-             p_tcb->MsgPtr     = (void *)0;
-             p_tcb->MsgSize    =         0u;
+             p_tcb->MsgPtr     = DEF_NULL;
+             p_tcb->MsgSize    = 0u;
 #endif
 #if (OS_CFG_TS_EN == DEF_ENABLED)
              p_tcb->TS         = ts;
 #endif
-             OS_PendListRemove(p_tcb);                          /* Remove task from the pend list                       */
-
-#if (OS_CFG_TICK_EN == DEF_ENABLED)
+             if (p_obj != DEF_NULL) {
+                 OS_PendListRemove(p_tcb);                      /* Remove task from all pend lists                      */
+             }
+#if (OS_CFG_TASK_TICK_EN == DEF_ENABLED)
              if (p_tcb->TaskState == OS_TASK_STATE_PEND_TIMEOUT_SUSPENDED) {
                  OS_TickListRemove(p_tcb);                      /* Cancel the timeout                                   */
              }
 #endif
-             p_tcb->TaskState  = OS_TASK_STATE_SUSPENDED;       /* Task needs to remain suspended                       */
-             p_tcb->PendStatus = reason;                        /* Indicate how the task became ready                   */
+             p_tcb->TaskState  = OS_TASK_STATE_SUSPENDED;       /* Pend Aborted task is still suspended                 */
+             p_tcb->PendStatus = OS_STATUS_PEND_ABORT;          /* Indicate pend was aborted                            */
              p_tcb->PendOn     = OS_TASK_PEND_ON_NOTHING;       /* Indicate no longer pending                           */
              break;
 
-        case OS_TASK_STATE_RDY:                                 /* Cannot cancel a pend when a task is in these states. */
-        case OS_TASK_STATE_DLY:
-        case OS_TASK_STATE_SUSPENDED:
-        case OS_TASK_STATE_DLY_SUSPENDED:
+        case OS_TASK_STATE_RDY:                                 /* Cannot Pend Abort a task that is ready               */
+        case OS_TASK_STATE_DLY:                                 /* Cannot Pend Abort a task that is delayed             */
+        case OS_TASK_STATE_SUSPENDED:                           /* Cannot Pend Abort a suspended task                   */
+        case OS_TASK_STATE_DLY_SUSPENDED:                       /* Cannot Pend Abort a suspended task also dly'd        */
         default:
-                                                                /* Default case.                                        */
              break;
     }
+}
+
+
+/*
+************************************************************************************************************************
+*                                           PEND ABORT A TASK PENDING ON MULTIPLE OBJECTS
+*
+* Description: This function is called when a task is pending on multiple objects and one of the objects has been pend
+*              aborted.  This function needs to indicate to the caller which object was pend aborted by placing the
+*              address of the object in the OS_PEND_DATA table corresponding to the pend aborted object.
+*
+*              For example, if the task pends on six (6) objects, the address of those 6 objects are placed in the
+*              .PendObjPtr field of the OS_PEND_DATA table as shown below.  Note that the .PendDataTblEntries of the
+*              OS_TCB would be set to six (6) in this case.  As shown, when the pend call returns because a task pend
+*              aborted 'Obj C' then, only the one entry contains the .RdyObjPtr filled in data and the other entries
+*              contains NULL pointers and zero data.
+*
+*              You should note that the NULL pointers are zero data values are actually filled in by the pend call.
+*
+*
+*                                           .PendObjPtr    .RdyObjPtr     .RdyMsgPtr     .RdyMsgSize    .RdyTS
+*                                         +--------------+--------------+--------------+--------------+--------------+
+*              p_tcb->PendDataTblPtr  ->  |  Obj A       |  0           | 0            | 0            | 0            |
+*                                         +--------------+--------------+--------------+--------------+--------------+
+*                                         |  Obj B       |  0           | 0            | 0            | 0            |
+*                                         +--------------+--------------+--------------+--------------+--------------+
+*                                         |  Obj C       |  Obj C       | 0            | 0            | TS           |
+*                                         +--------------+--------------+--------------+--------------+--------------+
+*                                         |  Obj D       |  0           | 0            | 0            | 0            |
+*                                         +--------------+--------------+--------------+--------------+--------------+
+*                                         |  Obj E       |  0           | 0            | 0            | 0            |
+*                                         +--------------+--------------+--------------+--------------+--------------+
+*                                         |  Obj F       |  0           | 0            | 0            | 0            |
+*                                         +--------------+--------------+--------------+--------------+--------------+
+*
+*
+* Arguments  : p_obj        is a pointer to the object being pend aborted to
+*              -----
+*
+*              p_tcb        is a pointer to the OS_TCB of the task that we'll abort he pend for
+*              -----
+*
+*              ts           is the time stamp of when the pend abort occurred
+*
+* Returns    : none
+*
+* Note(s)    : 1) This function is INTERNAL to uC/OS-III and your application MUST NOT call it.
+*
+*              2) This function is DEPRECATED, see OSPendMulti() note 1 for details.
+************************************************************************************************************************
+*/
+#if (OS_CFG_PEND_MULTI_EN == DEF_ENABLED)
+void  OS_PendAbort1 (OS_PEND_OBJ  *p_obj,
+                     OS_TCB       *p_tcb,
+                     CPU_TS        ts)
+{
+    OS_OBJ_QTY      n_pend_list;                                /* Number of pend lists                                 */
+    OS_PEND_DATA   *p_pend_data;
+
+
+#if (OS_CFG_TS_EN == DEF_DISABLED)
+    (void)ts;                                                   /* Prevent compiler warning for not using 'ts'          */
+#endif
+
+    p_pend_data = p_tcb->PendDataTblPtr;                        /* Point to the first OS_PEND_DATA to remove            */
+    n_pend_list = p_tcb->PendDataTblEntries;                    /* Get number of entries in the table                   */
+
+    while (n_pend_list > 0u) {                                  /* Mark posted object in OS_PEND_DATA table             */
+        if (p_obj == p_pend_data->PendObjPtr) {                 /* Did we find the object pend aborted?                 */
+            p_pend_data->RdyObjPtr = p_obj;                     /* Yes, indicate the object in the .RdyObjPtr           */
+#if (OS_CFG_TS_EN == DEF_ENABLED)
+            p_pend_data->RdyTS     = ts;                        /* save the timestamp of the pend abort                 */
+#endif
+            break;
+        }
+        p_pend_data++;
+        n_pend_list--;
+    }
+}
+#endif
+
+/*
+************************************************************************************************************************
+*                                              INITIALIZE A WAIT LIST TABLE
+*
+* Description: This function is called to initialize the fields of a table of OS_PEND_DATA entries.  It's assumed that
+*              the .PendObjPtr field of each entry in the table is set by the caller and thus will NOT be touched by
+*              this function.
+*
+* Arguments  : p_tcb              is a pointer to the TCB of the task that we want to pend abort.
+*              -----
+*
+*              p_pend_data_tbl    is a pointer to a table (see below) of OS_PEND_DATA elements to initialize.
+*              ---------------
+*
+*                                  .PendObjPtr .RdyObjPtr .RdyMsgPtr .RdyMsgSize .RdyTS .TCBPtr .NextPtr .PrevPtr
+*                                 +-----------+----------+----------+-----------+------+-------+--------+--------+    ^
+*               p_pend_data_tbl-> |     ?     |  0       | 0        | 0         | 0    | p_tcb | 0      | 0      |    |
+*                                 +-----------+----------+----------+-----------+------+-------+--------+--------+    |
+*                                 |     ?     |  0       | 0        | 0         | 0    | p_tcb | 0      | 0      |    |
+*                                 +-----------+----------+----------+-----------+------+-------+--------+--------+    |
+*                                 |     ?     |  0       | 0        | 0         | 0    | p_tcb | 0      | 0      |    |
+*                                 +-----------+----------+----------+-----------+------+-------+--------+--------+  size
+*                                 |     ?     |  0       | 0        | 0         | 0    | p_tcb | 0      | 0      |    |
+*                                 +-----------+----------+----------+-----------+------+-------+--------+--------+    |
+*                                 |     ?     |  0       | 0        | 0         | 0    | p_tcb | 0      | 0      |    |
+*                                 +-----------+----------+----------+-----------+------+-------+--------+--------+    |
+*                                 |     ?     |  0       | 0        | 0         | 0    | p_tcb | 0      | 0      |    |
+*                                 +-----------+----------+----------+-----------+------+-------+--------+--------+    V
+*
+*              tbl_size           is the size of the table in number of entries
+*
+* Returns    : none
+*
+* Note(s)    : 1) This function is INTERNAL to uC/OS-III and your application must not call it.
+*
+*              2) It's possible for the table to be of size 1 when multi-pend is not used
+*
+*              3) Note that the .PendObjPtr is NOT touched because it's assumed to be set by the caller.
+************************************************************************************************************************
+*/
+
+void  OS_PendDataInit (OS_TCB        *p_tcb,
+                       OS_PEND_DATA  *p_pend_data_tbl,
+                       OS_OBJ_QTY     tbl_size)
+{
+#if (OS_CFG_PEND_MULTI_EN == DEF_ENABLED)
+    OS_OBJ_QTY  i;
+#endif
+
+
+#if (OS_CFG_PEND_MULTI_EN == DEF_ENABLED)
+    p_tcb->PendDataTblEntries = tbl_size;                       /* Link the TCB to the beginning of the table           */
+    p_tcb->PendDataTblPtr     = p_pend_data_tbl;
+
+    for (i = 0u; i < tbl_size; i++) {
+        p_pend_data_tbl->NextPtr    = DEF_NULL;                 /* Initialize all the fields                            */
+        p_pend_data_tbl->PrevPtr    = DEF_NULL;
+        p_pend_data_tbl->RdyObjPtr  = DEF_NULL;
+        p_pend_data_tbl->RdyMsgPtr  = DEF_NULL;
+        p_pend_data_tbl->RdyMsgSize = 0u;
+#if (OS_CFG_TS_EN == DEF_ENABLED)
+        p_pend_data_tbl->RdyTS      = 0u;
+#endif
+        p_pend_data_tbl->TCBPtr     = p_tcb;                    /* Every entry points back to the TCB of the task       */
+        p_pend_data_tbl++;
+    }
+#else
+    (void)tbl_size;
+
+    p_tcb->PendDataTblPtr       = p_pend_data_tbl;
+
+    p_pend_data_tbl->NextPtr    = DEF_NULL;        /* Initialize all the fields                              */
+    p_pend_data_tbl->PrevPtr    = DEF_NULL;
+    p_pend_data_tbl->RdyObjPtr  = DEF_NULL;
+    p_pend_data_tbl->RdyMsgPtr  = DEF_NULL;
+    p_pend_data_tbl->RdyMsgSize = 0u;
+#if (OS_CFG_TS_EN == DEF_ENABLED)
+    p_pend_data_tbl->RdyTS      = 0u;
+#endif
+    p_pend_data_tbl->TCBPtr     = p_tcb;                    /* Every entry points back to the TCB of the task         */
+#endif
 }
 
 
@@ -1141,19 +1319,22 @@ void  OS_PendAbort (OS_TCB     *p_tcb,
 ************************************************************************************************************************
 */
 
+
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
 void  OS_PendDbgNameAdd (OS_PEND_OBJ  *p_obj,
                          OS_TCB       *p_tcb)
 {
     OS_PEND_LIST  *p_pend_list;
+    OS_PEND_DATA  *p_pend_data;
     OS_TCB        *p_tcb1;
 
 
-    if (p_obj != (OS_PEND_OBJ *)0) {
+    if (p_obj != DEF_NULL) {
         p_tcb->DbgNamePtr =  p_obj->NamePtr;                    /* Task pending on this object ... save name in TCB     */
         p_pend_list       = &p_obj->PendList;                   /* Find name of HP task pending on this object ...      */
-        p_tcb1            =  p_pend_list->HeadPtr;
-        p_obj->DbgNamePtr =  p_tcb1->NamePtr;                   /* ... Save in object                                   */
+        p_pend_data       =  p_pend_list->HeadPtr;
+        p_tcb1            =  p_pend_data->TCBPtr;
+        p_obj->DbgNamePtr = p_tcb1->NamePtr;                    /* ... Save in object                                   */
     } else {
         switch (p_tcb->PendOn) {
             case OS_TASK_PEND_ON_TASK_Q:
@@ -1172,23 +1353,23 @@ void  OS_PendDbgNameAdd (OS_PEND_OBJ  *p_obj,
 }
 
 
+
 void  OS_PendDbgNameRemove (OS_PEND_OBJ  *p_obj,
                             OS_TCB       *p_tcb)
 {
     OS_PEND_LIST  *p_pend_list;
+    OS_PEND_DATA  *p_pend_data;
     OS_TCB        *p_tcb1;
 
 
     p_tcb->DbgNamePtr = (CPU_CHAR *)((void *)" ");              /* Remove name of object pended on for readied task     */
-
-    if (p_obj != (OS_PEND_OBJ *)0) {
-        p_pend_list = &p_obj->PendList;
-        p_tcb1      =  p_pend_list->HeadPtr;
-        if (p_tcb1 != (OS_TCB *)0) {                            /* Find name of HP task pending on this object ...      */
-            p_obj->DbgNamePtr = p_tcb1->NamePtr;                /* ... Save in object                                   */
-        } else {
-            p_obj->DbgNamePtr = (CPU_CHAR *)((void *)" ");      /* Or no other task is pending on object                */
-        }
+    p_pend_list       = &p_obj->PendList;
+    p_pend_data       =  p_pend_list->HeadPtr;
+    if (p_pend_data != DEF_NULL) {
+        p_tcb1            = p_pend_data->TCBPtr;
+        p_obj->DbgNamePtr = p_tcb1->NamePtr;
+    } else {
+        p_obj->DbgNamePtr = (CPU_CHAR *)((void *)" ");          /* No other task pending on object                      */
     }
 }
 #endif
@@ -1196,10 +1377,71 @@ void  OS_PendDbgNameRemove (OS_PEND_OBJ  *p_obj,
 
 /*
 ************************************************************************************************************************
-*                                 CHANGE THE PRIORITY OF A TASK WAITING IN A PEND LIST
+*                               CHANGE THE PRIORITY OF A TASK WAITING IN ONE OR MORE PEND LISTS
 *
-* Description: This function is called to change the position of a task waiting in a pend list. The strategy used is to
-*              remove the task from the pend list and add it again using its changed priority.
+* Description: This function is called to change the position of a task waiting in one or more pend lists.  Because a
+*              task can be waiting on multiple objects then each pend list needs to be updated.  Specifically, the
+*              task can be the highest priority task waiting on one pend list, the lowest priority task waiting in yet
+*              another pend list or somewhere else in another pend list.  Because of this, we need to be able to change
+*              each of those pend lists individually.
+*
+*              The drawing below shows an example of a task (OS_TCB) that belongs to 3 separate pend lists.  Each
+*              pend list can contain multiple tasks (the .PrevPtr and .NextPtr show a '?' to indicate this).  The OS_TCB
+*              contains a pointer (.PendDataTblPtr) to the first entry in the list of pend lists.
+*
+*                                                                                                          OS_TCB
+*                                                                                                   +--------------------+
+*                                                                                                   |                    |
+*                                                                                                   +--------------------+
+*                                                                                                   | PendDataTblEntries |
+*                                      Point to first entry in the OS_PEND_DATA table (i.e. [0])    +--------------------+
+*                                          /-----------------------------<------------------------- | PendDataTblPtr     |
+*                                          |                                                        +--------------------+
+*                                          |                                                                 ^
+*              OS_PEND_LIST                |                                                                 |
+*              +------------+              |                                                                 |
+*              | TailPtr    |              |                                                                 |
+*              +------------+              |                                                                 |
+*              | HeadPtr    |              |                                                                 |
+*              +------------+              |                                        /---------->-------------/
+*              | NbrEntries |              |                                        |                        |
+*              +------------+     [0]      V   OS_PEND_DATA                         |                        |
+*                                     +---------+------------+-------+---------+--------+---------+          |
+*                             ? <---- | PrevPtr | PendObjPtr |       |         | TCBPtr | NextPtr | --> ?    |
+*                                     +---------+------------+-------+---------+--------+---------+          |
+*                                                                                                            |
+*                                                                                                            |
+*                                                                                                            |
+*                                                                                                            |
+*                                                                                                            |
+*              OS_PEND_LIST                                                                Point back to TCB |
+*              +------------+                                                                                |
+*              | TailPtr    |                                                                                |
+*              +------------+                                                                                |
+*              | HeadPtr    |                                                                                |
+*              +------------+                                                      /----------->-------------/
+*              | NbrEntries |                                                      |                         |
+*              +------------+     [1]          OS_PEND_DATA                        |                         |
+*                                     +---------+------------+-------+---------+--------+---------+          |
+*                             ? <---- | PrevPtr | PendObjPtr |       |         | TCBPtr | NextPtr | --> ?    |
+*                                     +---------+------------+-------+---------+--------+---------+          |
+*                                                                                                            |
+*                                                                                                            |
+*                                                                                                            |
+*                                                                                                            |
+*                                                                                                            |
+*              OS_PEND_LIST                                                                                  |
+*              +------------+                                                                                |
+*              | TailPtr    |                                                                                |
+*              +------------+                                                                                |
+*              | HeadPtr    |                                                                                |
+*              +------------+                                                      /----------->-------------/
+*              | NbrEntries |                                                      |
+*              +------------+     [2]          OS_PEND_DATA                        |
+*                                     +---------+------------+-------+---------+--------+---------+
+*                             ? <---- | PrevPtr | PendObjPtr |       |         | TCBPtr | NextPtr | ----> ?
+*                                     +---------+------------+-------+---------+--------+---------+
+*
 *
 * Arguments  : p_tcb       is a pointer to the TCB of the task to move
 *              -----
@@ -1212,19 +1454,32 @@ void  OS_PendDbgNameRemove (OS_PEND_OBJ  *p_obj,
 ************************************************************************************************************************
 */
 
-void  OS_PendListChangePrio (OS_TCB  *p_tcb)
+void  OS_PendListChangePrio (OS_TCB   *p_tcb)
 {
-    OS_PEND_LIST  *p_pend_list;
-    OS_PEND_OBJ   *p_obj;
+    OS_OBJ_QTY      n_pend_list;                                /* Number of pend lists                                 */
+    OS_PEND_DATA   *p_pend_data;
+    OS_PEND_LIST   *p_pend_list;
+    OS_PEND_OBJ    *p_obj;
 
-    p_obj       =  p_tcb->PendObjPtr;                           /* Get pointer to pend list                             */
-    p_pend_list = &p_obj->PendList;
 
-    if (p_pend_list->HeadPtr->PendNextPtr != (OS_TCB *)0) {     /* Only move if multiple entries in the list            */
-            OS_PendListRemove(p_tcb);                           /* Remove entry from current position                   */
-            p_tcb->PendObjPtr = p_obj;
+    p_pend_data = p_tcb->PendDataTblPtr;                        /* Point to first wait list entry                       */
+#if (OS_CFG_PEND_MULTI_EN == DEF_ENABLED)
+    n_pend_list = p_tcb->PendDataTblEntries;                    /* Get the number of pend list task is in               */
+#else
+    n_pend_list = 1u;
+#endif
+
+    while (n_pend_list > 0u) {
+        p_obj       =  p_pend_data->PendObjPtr;                 /* Get pointer to pend list                             */
+        p_pend_list = &p_obj->PendList;
+        if (p_pend_list->HeadPtr->NextPtr != DEF_NULL) {        /* Only move if multiple entries in the list            */
+            OS_PendListRemove1(p_pend_list,                     /* Remove entry from current position                   */
+                               p_pend_data);
             OS_PendListInsertPrio(p_pend_list,                  /* INSERT it back in the list                           */
-                                  p_tcb);
+                                  p_pend_data);
+        }
+        p_pend_data++;                                          /* Point to next wait list                              */
+        n_pend_list--;
     }
 }
 
@@ -1246,20 +1501,21 @@ void  OS_PendListChangePrio (OS_TCB  *p_tcb)
 
 void  OS_PendListInit (OS_PEND_LIST  *p_pend_list)
 {
-    p_pend_list->HeadPtr    = (OS_TCB *)0;
-    p_pend_list->TailPtr    = (OS_TCB *)0;
+    p_pend_list->HeadPtr    = DEF_NULL;
+    p_pend_list->TailPtr    = DEF_NULL;
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
-    p_pend_list->NbrEntries =           0u;
+    p_pend_list->NbrEntries = 0u;
 #endif
 }
 
 
 /*
 ************************************************************************************************************************
-*                                  INSERT A TASK BASED ON IT'S PRIORITY IN A PEND LIST
+*                                   INSERT PEND DATA BASED ON IT'S PRIORITY IN A LIST
 *
-* Description: This function is called to place an OS_TCB entry in a linked list based on its priority.  The
-*              highest priority being placed at the head of the list. The TCB is assumed to contain the priority
+* Description: This function is called to place an OS_PEND_DATA entry in a linked list based on its priority.  The
+*              highest priority being placed at the head of the list.  It's assumed that the OS_PEND_DATA entry to
+*              insert points to the TCB of the task being inserted.  The TCB is also assumed to contain the priority
 *              of the task in its .Prio field.
 *
 *              CASE 0: Insert in an empty list.
@@ -1278,90 +1534,100 @@ void  OS_PendListInit (OS_PEND_LIST  *p_pend_list)
 *              CASE 1: Insert BEFORE or AFTER an OS_TCB
 *
 *                     OS_PEND_LIST
-*                     +--------------+         OS_TCB
-*                     | TailPtr      |--+---> +--------------+
-*                     +--------------+  |     | PendNextPtr  |->0
-*                     | HeadPtr      |--/     +--------------+
-*                     +--------------+     0<-| PendPrevPtr  |
-*                     | NbrEntries=1 |        +--------------+
-*                     +--------------+        |              |
-*                                             +--------------+
-*                                             |              |
-*                                             +--------------+
+*                     +--------------+         OS_PEND_DATA
+*                     | TailPtr      |--+---> +------------+
+*                     +--------------+  |     | NextPtr    |->0
+*                     | HeadPtr      |--/     +------------+
+*                     +--------------+     0<-| PrevPtr    |
+*                     | NbrEntries=1 |        +------------+
+*                     +--------------+        |            |
+*                                             +------------+
+*                                             |            |
+*                                             +------------+
 *
 *
 *                     OS_PEND_LIST
 *                     +--------------+
-*                     | TailPtr      |---------------------------------------------------+
-*                     +--------------+         OS_TCB                 OS_TCB             |    OS_TCB
-*                     | HeadPtr      |------> +--------------+       +--------------+    +-> +--------------+
-*                     +--------------+        | PendNextPtr  |<------| PendNextPtr  | ...... | PendNextPtr  |->0
-*                     | NbrEntries=N |        +--------------+       +--------------+        +--------------+
-*                     +--------------+     0<-| PendPrevPtr  |<------| PendPrevPtr  | ...... | PendPrevPtr  |
-*                                             +--------------+       +--------------+        +--------------+
-*                                             |              |       |              |        |              |
-*                                             +--------------+       +--------------+        +--------------+
-*                                             |              |       |              |        |              |
-*                                             +--------------+       +--------------+        +--------------+
+*                     | TailPtr      |-----------------------------------------------+
+*                     +--------------+         OS_PEND_DATA         OS_PEND_DATA     |    OS_PEND_DATA
+*                     | HeadPtr      |------> +------------+       +------------+    +-> +------------+
+*                     +--------------+        | NextPtr    |------>| NextPtr    | ...... | NextPtr    |->0
+*                     | NbrEntries=N |        +------------+       +------------+        +------------+
+*                     +--------------+     0<-| PrevPtr    |<------| PrevPtr    | ...... | PrevPtr    |
+*                                             +------------+       +------------+        +------------+
+*                                             |            |       |            |        |            |
+*                                             +------------+       +------------+        +------------+
+*                                             |            |       |            |        |            |
+*                                             +------------+       +------------+        +------------+
 *
 *
-* Arguments  : p_pend_list    is a pointer to the OS_PEND_LIST where the OS_TCB entry will be inserted
+* Arguments  : p_pend_list    is a pointer to the OS_PEND_LIST where the OS_PEND_DATA entry will be inserted
 *              -----------
 *
-*              p_tcb          is the OS_TCB to insert in the list
-*              -----
+*              p_pend_data    is the OS_PEND_DATA to insert in the list
+*              -----------
 *
 * Returns    : none
 *
 * Note(s)    : 1) This function is INTERNAL to uC/OS-III and your application MUST NOT call it.
+*
+*              2) 'p_pend_data->TCBPtr->Prio' contains the priority of the TCB associated with the entry to insert.
+*                 We can compare this priority with the priority of other entries in the list.
 ************************************************************************************************************************
 */
 
 void  OS_PendListInsertPrio (OS_PEND_LIST  *p_pend_list,
-                             OS_TCB        *p_tcb)
+                             OS_PEND_DATA  *p_pend_data)
 {
-    OS_PRIO   prio;
-    OS_TCB   *p_tcb_next;
+    OS_PRIO        prio;
+    OS_TCB        *p_tcb;
+    OS_TCB        *p_tcb_next;
+    OS_PEND_DATA  *p_pend_data_prev;
+    OS_PEND_DATA  *p_pend_data_next;
 
 
-    prio  = p_tcb->Prio;                                        /* Obtain the priority of the task to insert            */
 
-    if (p_pend_list->HeadPtr == (OS_TCB *)0) {                  /* CASE 0: Insert when there are no entries             */
+    p_tcb = p_pend_data->TCBPtr;                                /* Obtain the priority of the task to insert            */
+    prio  = p_tcb->Prio;
+    if (p_pend_list->HeadPtr == DEF_NULL) {                     /* CASE 0: Insert when there are no entries             */
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
         p_pend_list->NbrEntries = 1u;                           /* This is the first entry                              */
 #endif
-        p_tcb->PendNextPtr   = (OS_TCB *)0;                     /* No other OS_TCBs in the list                         */
-        p_tcb->PendPrevPtr   = (OS_TCB *)0;
-        p_pend_list->HeadPtr =  p_tcb;
-        p_pend_list->TailPtr =  p_tcb;
+        p_pend_data->NextPtr    = DEF_NULL;                     /* No other OS_PEND_DATAs in the list                   */
+        p_pend_data->PrevPtr    = DEF_NULL;
+        p_pend_list->HeadPtr    = p_pend_data;
+        p_pend_list->TailPtr    = p_pend_data;
     } else {
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
-        p_pend_list->NbrEntries++;                              /* CASE 1: One more OS_TCBs in the list                 */
+        p_pend_list->NbrEntries++;                              /* CASE 1: One more OS_PEND_DATA in the list            */
 #endif
-        p_tcb_next = p_pend_list->HeadPtr;
-        while (p_tcb_next != (OS_TCB *)0) {                     /* Find the position where to insert                    */
+        p_pend_data_next = p_pend_list->HeadPtr;
+        while (p_pend_data_next != DEF_NULL) {                  /* Find the position where to insert                    */
+            p_tcb_next   = p_pend_data_next->TCBPtr;
             if (prio < p_tcb_next->Prio) {
                 break;                                          /* Found! ... insert BEFORE current                     */
             } else {
-                p_tcb_next = p_tcb_next->PendNextPtr;           /* Not Found, follow the list                           */
+                p_pend_data_next = p_pend_data_next->NextPtr;   /* Not Found, follow the list                           */
             }
         }
-        if (p_tcb_next == (OS_TCB *)0) {                        /* TCB to insert is lowest in priority                  */
-            p_tcb->PendNextPtr              = (OS_TCB *)0;      /* ... insert at the tail.                              */
-            p_tcb->PendPrevPtr              =  p_pend_list->TailPtr;
-            p_tcb->PendPrevPtr->PendNextPtr =  p_tcb;
-            p_pend_list->TailPtr            =  p_tcb;
+        if (p_pend_data_next == DEF_NULL) {                     /* TCB to insert is lower in prio                       */
+            p_pend_data->NextPtr      = DEF_NULL;               /* ... insert at the tail.                              */
+            p_pend_data_prev          = p_pend_list->TailPtr;
+            p_pend_data->PrevPtr      = p_pend_data_prev;
+            p_pend_data_prev->NextPtr = p_pend_data;
+            p_pend_list->TailPtr      = p_pend_data;
         } else {
-            if (p_tcb_next->PendPrevPtr == (OS_TCB *)0) {       /* Is new TCB highest priority?                         */
-                p_tcb->PendNextPtr      =  p_tcb_next;          /* Yes, insert as new Head of list                      */
-                p_tcb->PendPrevPtr      = (OS_TCB *)0;
-                p_tcb_next->PendPrevPtr =  p_tcb;
-                p_pend_list->HeadPtr    =  p_tcb;
-            } else {                                            /* No,  insert in between two entries                   */
-                p_tcb->PendNextPtr              = p_tcb_next;
-                p_tcb->PendPrevPtr              = p_tcb_next->PendPrevPtr;
-                p_tcb->PendPrevPtr->PendNextPtr = p_tcb;
-                p_tcb_next->PendPrevPtr         = p_tcb;
+            if (p_pend_data_next->PrevPtr == DEF_NULL) {        /* Is new TCB highest priority?                         */
+                p_pend_data_next->PrevPtr = p_pend_data;        /* Yes, insert as new Head of list                      */
+                p_pend_data->PrevPtr      = DEF_NULL;
+                p_pend_data->NextPtr      = p_pend_data_next;
+                p_pend_list->HeadPtr      = p_pend_data;
+            } else {
+                p_pend_data_prev          = p_pend_data_next->PrevPtr;  /* No,  insert in between two entries           */
+                p_pend_data->PrevPtr      = p_pend_data_prev;
+                p_pend_data->NextPtr      = p_pend_data_next;
+                p_pend_data_prev->NextPtr = p_pend_data;
+                p_pend_data_next->PrevPtr = p_pend_data;
             }
         }
     }
@@ -1370,44 +1636,45 @@ void  OS_PendListInsertPrio (OS_PEND_LIST  *p_pend_list,
 
 /*
 ************************************************************************************************************************
-*                           REMOVE TASK FROM A PEND LIST KNOWING ONLY WHICH TCB TO REMOVE
+*                           REMOVE TASK FROM PEND LIST(s) KNOWING ONLY WHICH TCB TO REMOVE
 *
-* Description: This function is called to remove a task from a pend list knowing the TCB of the task to remove.
+* Description: This function is called to remove a task from a pend list knowing only the TCB of the task to remove
 *
-*              CASE 0: OS_PEND_LIST list is empty, nothing to do.
 *
-*              CASE 1: Only 1 OS_TCB in the list.
+*              CASE 0: OS_PEND_DATA list is empty, nothing to do.
+*
+*              CASE 1: Only 1 OS_PEND_DATA in the list.
 *
 *                     OS_PEND_LIST
-*                     +--------------+         OS_TCB
-*                     | TailPtr      |--+---> +--------------+
-*                     +--------------+  |     | PendNextPtr  |->0
-*                     | HeadPtr      |--/     +--------------+
-*                     +--------------+     0<-| PendPrevPtr  |
-*                     | NbrEntries=1 |        +--------------+
-*                     +--------------+        |              |
-*                                             +--------------+
-*                                             |              |
-*                                             +--------------+
+*                     +--------------+         OS_PEND_DATA
+*                     | TailPtr      |--+---> +------------+
+*                     +--------------+  |     | NextPtr    |->0
+*                     | HeadPtr      |--/     +------------+
+*                     +--------------+     0<-| PrevPtr    |
+*                     | NbrEntries=1 |        +------------+
+*                     +--------------+        |            |
+*                                             +------------+
+*                                             |            |
+*                                             +------------+
 *
-*              CASE N: Two or more OS_TCBs in the list.
+*              CASE N: Two or more OS_PEND_DATAs in the list.
 *
 *                     OS_PEND_LIST
 *                     +--------------+
-*                     | TailPtr      |---------------------------------------------------+
-*                     +--------------+         OS_TCB                 OS_TCB             |    OS_TCB
-*                     | HeadPtr      |------> +--------------+       +--------------+    +-> +--------------+
-*                     +--------------+        | PendNextPtr  |<------| PendNextPtr  | ...... | PendNextPtr  |->0
-*                     | NbrEntries=N |        +--------------+       +--------------+        +--------------+
-*                     +--------------+     0<-| PendPrevPtr  |<------| PendPrevPtr  | ...... | PendPrevPtr  |
-*                                             +--------------+       +--------------+        +--------------+
-*                                             |              |       |              |        |              |
-*                                             +--------------+       +--------------+        +--------------+
-*                                             |              |       |              |        |              |
-*                                             +--------------+       +--------------+        +--------------+
+*                     | TailPtr      |-----------------------------------------------+
+*                     +--------------+         OS_PEND_DATA         OS_PEND_DATA     |    OS_PEND_DATA
+*                     | HeadPtr      |------> +------------+       +------------+    +-> +------------+
+*                     +--------------+        | NextPtr    |------>| NextPtr    | ...... | NextPtr    |->0
+*                     | NbrEntries=N |        +------------+       +------------+        +------------+
+*                     +--------------+     0<-| PrevPtr    |<------| PrevPtr    | ...... | PrevPtr    |
+*                                             +------------+       +------------+        +------------+
+*                                             |            |       |            |        |            |
+*                                             +------------+       +------------+        +------------+
+*                                             |            |       |            |        |            |
+*                                             +------------+       +------------+        +------------+
 *
 *
-* Arguments  : p_tcb          is a pointer to the TCB of the task to remove from the pend list
+* Arguments  : p_tcb          is a pointer to the TCB of the task to remove from all pend lists
 *              -----
 *
 * Returns    : none
@@ -1418,43 +1685,297 @@ void  OS_PendListInsertPrio (OS_PEND_LIST  *p_pend_list,
 
 void  OS_PendListRemove (OS_TCB  *p_tcb)
 {
-    OS_PEND_LIST  *p_pend_list;
-    OS_TCB        *p_next;
-    OS_TCB        *p_prev;
+    OS_OBJ_QTY      n_pend_list;                                /* Number of pend lists                                 */
+    OS_PEND_DATA   *p_pend_data;
+    OS_PEND_LIST   *p_pend_list;
+    OS_PEND_OBJ    *p_obj;
 
 
-    if (p_tcb->PendObjPtr != (OS_PEND_OBJ *)0) {                /* Only remove if object has a pend list.               */
-        p_pend_list = &p_tcb->PendObjPtr->PendList;             /* Get pointer to pend list                             */
-
-                                                                /* Remove TCB from the pend list.                       */
-        if (p_pend_list->HeadPtr->PendNextPtr == (OS_TCB *)0) {
-            p_pend_list->HeadPtr = (OS_TCB *)0;                 /* Only one entry in the pend list                      */
-            p_pend_list->TailPtr = (OS_TCB *)0;
-        } else if (p_tcb->PendPrevPtr == (OS_TCB *)0) {         /* See if entry is at the head of the list              */
-            p_next               =  p_tcb->PendNextPtr;         /* Yes                                                  */
-            p_next->PendPrevPtr  = (OS_TCB *)0;
-            p_pend_list->HeadPtr =  p_next;
-
-        } else if (p_tcb->PendNextPtr == (OS_TCB *)0) {         /* See if entry is at the tail of the list              */
-            p_prev               =  p_tcb->PendPrevPtr;         /* Yes                                                  */
-            p_prev->PendNextPtr  = (OS_TCB *)0;
-            p_pend_list->TailPtr =  p_prev;
-
-        } else {
-            p_prev               = p_tcb->PendPrevPtr;          /* Remove from inside the list                          */
-            p_next               = p_tcb->PendNextPtr;
-            p_prev->PendNextPtr  = p_next;
-            p_next->PendPrevPtr  = p_prev;
-        }
-#if (OS_CFG_DBG_EN == DEF_ENABLED)
-        p_pend_list->NbrEntries--;                              /* One less entry in the list                           */
+    if (p_tcb->PendDataTblPtr != DEF_NULL) {                    /* Only remove if object has a pend list.               */
+        p_pend_data = p_tcb->PendDataTblPtr;                    /* Point to the first OS_PEND_DATA to remove            */
+#if (OS_CFG_PEND_MULTI_EN == DEF_ENABLED)
+        n_pend_list = p_tcb->PendDataTblEntries;                /* Get number of entries in the table                   */
+#else
+        n_pend_list = 1u;
 #endif
-        p_tcb->PendNextPtr = (OS_TCB      *)0;
-        p_tcb->PendPrevPtr = (OS_TCB      *)0;
-        p_tcb->PendObjPtr  = (OS_PEND_OBJ *)0;
+
+
+        while (n_pend_list > 0u) {
+        p_obj       =  p_pend_data->PendObjPtr;                 /* Get pointer to pend list                             */
+            p_pend_list = &p_obj->PendList;
+            OS_PendListRemove1(p_pend_list,
+                               p_pend_data);
+            p_pend_data++;
+            n_pend_list--;
+        }
+    #if (OS_CFG_PEND_MULTI_EN == DEF_ENABLED)
+        p_tcb->PendDataTblEntries = 0u;
+    #endif
+        p_tcb->PendDataTblPtr     = DEF_NULL;
     }
 }
 
+
+/*
+************************************************************************************************************************
+*                               REMOVE AN 'OS_PEND_DATA' ENTRY from a 'OS_PEND_LIST'
+*
+* Description: This function is called to remove a task from a wait list knowing only the TCB of the task to remove
+*
+*
+*              CASE 1: Only 1 OS_PEND_DATA in the list.
+*
+*                     OS_PEND_LIST
+*                     +--------------+         OS_PEND_DATA
+*                     | TailPtr      |--+---> +------------+
+*                     +--------------+  |     | NextPtr    |->0
+*                     | HeadPtr      |--/      +------------+
+*                     +--------------+     0<-| PrevPtr    |
+*                     | NbrEntries=1 |        +------------+
+*                     +--------------+        |            |
+*                                             +------------+
+*                                             |            |
+*                                             +------------+
+*
+*              CASE N: Two or more OS_PEND_DATAs in the list.
+*
+*                     OS_PEND_LIST
+*                     +--------------+
+*                     | TailPtr      |-----------------------------------------------+
+*                     +--------------+         OS_PEND_DATA         OS_PEND_DATA     |    OS_PEND_DATA
+*                     | HeadPtr      |------> +------------+       +------------+    +-> +------------+
+*                     +--------------+        | NextPtr    |------>| NextPtr    | ...... | NextPtr    |->0
+*                     | NbrEntries=N |        +------------+       +------------+        +------------+
+*                     +--------------+     0<-| PrevPtr    |<------| PrevPtr    | ...... | PrevPtr    |
+*                                             +------------+       +------------+        +------------+
+*                                             |            |       |            |        |            |
+*                                             +------------+       +------------+        +------------+
+*                                             |            |       |            |        |            |
+*                                             +------------+       +------------+        +------------+
+*
+*
+* Arguments  : p_pend_list     is a pointer to the pend list where 'p_pend_data' will be removed from
+*              -----------
+*
+*              p_pend_data     is a pointer to the OS_PEND_DATA to remove from the pend list
+*              -----------
+*
+* Returns    : none
+*
+* Note(s)    : 1) This function is INTERNAL to uC/OS-III and your application MUST NOT call it.
+************************************************************************************************************************
+*/
+
+void  OS_PendListRemove1 (OS_PEND_LIST  *p_pend_list,
+                          OS_PEND_DATA  *p_pend_data)
+{
+    OS_PEND_DATA  *p_prev;
+    OS_PEND_DATA  *p_next;
+
+
+
+    if (p_pend_list->HeadPtr->NextPtr == DEF_NULL) {
+        p_pend_list->HeadPtr = DEF_NULL;                        /* Only one entry in the pend list                      */
+        p_pend_list->TailPtr = DEF_NULL;
+
+    } else if (p_pend_data->PrevPtr == DEF_NULL) {              /* See if entry is at the head of the list              */
+        p_next               = p_pend_data->NextPtr;            /* Yes                                                  */
+        p_next->PrevPtr      = DEF_NULL;
+        p_pend_list->HeadPtr = p_next;
+
+    } else if (p_pend_data->NextPtr == DEF_NULL) {              /* See if entry is at the tail of the list              */
+        p_prev               = p_pend_data->PrevPtr;            /* Yes                                                  */
+        p_prev->NextPtr      = DEF_NULL;
+        p_pend_list->TailPtr = p_prev;
+
+    } else {
+        p_prev               = p_pend_data->PrevPtr;            /* Remove from inside the list                          */
+        p_next               = p_pend_data->NextPtr;
+        p_prev->NextPtr      = p_next;
+        p_next->PrevPtr      = p_prev;
+    }
+#if (OS_CFG_DBG_EN == DEF_ENABLED)
+    p_pend_list->NbrEntries--;                                  /* One less entry in the list                           */
+#endif
+    p_pend_data->NextPtr = DEF_NULL;
+    p_pend_data->PrevPtr = DEF_NULL;
+}
+
+
+/*
+************************************************************************************************************************
+*                                READY A TASK THAT WAS PENDING ON AN OBJECT BEING DELETED
+*
+* Description: This function is called to make a task ready-to-run because an object is being deleted
+*
+* Arguments  : p_obj          is a pointer to the object being deleted
+*              -----
+*
+*              p_tcb          is a pointer to the OS_TCB of the task to make ready-to-run
+*              -----
+*
+*              ts             is a timestamp to indicate when the object was deleted
+*
+* Returns    : none
+*
+* Note(s)    : This function is INTERNAL to uC/OS-III and your application should not call it.
+************************************************************************************************************************
+*/
+
+void  OS_PendObjDel (OS_PEND_OBJ  *p_obj,
+                     OS_TCB       *p_tcb,
+                     CPU_TS        ts)
+{
+#if (OS_CFG_TS_EN == DEF_DISABLED)
+    (void)ts;                                                   /* Prevent compiler warning for not using 'ts'          */
+#endif
+#if (OS_CFG_PEND_MULTI_EN == DEF_DISABLED)
+    (void)p_obj;
+#endif
+
+    switch (p_tcb->TaskState) {
+        case OS_TASK_STATE_RDY:                                 /* These states should never occur                      */
+        case OS_TASK_STATE_DLY:
+        case OS_TASK_STATE_SUSPENDED:
+        case OS_TASK_STATE_DLY_SUSPENDED:
+             break;
+
+        case OS_TASK_STATE_PEND:
+        case OS_TASK_STATE_PEND_TIMEOUT:
+#if (OS_CFG_PEND_MULTI_EN == DEF_ENABLED)
+             if (p_tcb->PendOn == OS_TASK_PEND_ON_MULTI) {
+                 OS_PendObjDel1(p_obj,                          /* Indicate which object was pend aborted               */
+                                p_tcb,
+                                ts);
+             }
+#endif
+#if (OS_MSG_EN == DEF_ENABLED)
+             p_tcb->MsgPtr     = DEF_NULL;
+             p_tcb->MsgSize    = 0u;
+#endif
+#if (OS_CFG_TS_EN == DEF_ENABLED)
+             p_tcb->TS         = ts;
+#endif
+             OS_PendListRemove(p_tcb);                          /* Remove task from all wait lists                      */
+#if (OS_CFG_TASK_TICK_EN == DEF_ENABLED)
+             if (p_tcb->TaskState == OS_TASK_STATE_PEND_TIMEOUT) {
+                 OS_TickListRemove(p_tcb);                      /* Remove from tick list                                */
+             }
+#endif
+             OS_RdyListInsert(p_tcb);                           /* Insert the task in the ready list                    */
+             p_tcb->TaskState  = OS_TASK_STATE_RDY;             /* Task is readied because object is deleted            */
+             p_tcb->PendStatus = OS_STATUS_PEND_DEL;
+             p_tcb->PendOn     = OS_TASK_PEND_ON_NOTHING;
+             break;
+
+        case OS_TASK_STATE_PEND_SUSPENDED:
+        case OS_TASK_STATE_PEND_TIMEOUT_SUSPENDED:
+#if (OS_CFG_PEND_MULTI_EN == DEF_ENABLED)
+             if (p_tcb->PendOn == OS_TASK_PEND_ON_MULTI) {
+                 OS_PendObjDel1(p_obj,                          /* Indicate which object was pend aborted               */
+                                p_tcb,
+                                ts);
+             }
+#endif
+#if (OS_MSG_EN == DEF_ENABLED)
+             p_tcb->MsgPtr     = DEF_NULL;
+             p_tcb->MsgSize    = 0u;
+#endif
+#if (OS_CFG_TS_EN == DEF_ENABLED)
+             p_tcb->TS         = ts;
+#endif
+             OS_PendListRemove(p_tcb);                          /* Remove task from all wait lists                      */
+#if (OS_CFG_TASK_TICK_EN == DEF_ENABLED)
+             if (p_tcb->TaskState == OS_TASK_STATE_PEND_TIMEOUT_SUSPENDED) {
+                 OS_TickListRemove(p_tcb);                      /* Cancel the timeout                                   */
+             }
+#endif
+             p_tcb->TaskState  = OS_TASK_STATE_SUSPENDED;       /* Task needs to remain suspended                       */
+             p_tcb->PendStatus = OS_STATUS_PEND_DEL;
+             p_tcb->PendOn     = OS_TASK_PEND_ON_NOTHING;       /* Indicate no longer pending                           */
+             break;
+
+        default:
+             break;
+    }
+}
+
+
+/*
+************************************************************************************************************************
+*                                    DELETE AN OBJECT FROM A TASK PENDING ON MULTIPLE OBJECTS
+*
+* Description: This function is called when a task is pending on multiple objects and the object is being deleted.
+*              This function needs to indicate to the caller which object was deleted by placing the address of the
+*              object in the OS_PEND_DATA table corresponding to the deleted object.
+*
+*              For example, if the task pends on six (6) objects, the address of those 6 objects are placed in the
+*              .PendObjPtr field of the OS_PEND_DATA table as shown below.  Note that the .PendDataTblEntries would be
+*              set to six (6) in this case.  As shown, when the pend call returns because a task deleted 'Obj C' then,
+*              only the one entry contains the filled in data and the other entries contains NULL pointers and zero
+*              data.
+*
+*              You should note that the NULL pointers are zero data values are actually filled in by the pend call.
+*
+*
+*                                           .PendObjPtr    .RdyObjPtr     .RdyMsgPtr     .RdyMsgSize    .RdyTS
+*                                         +--------------+--------------+--------------+--------------+--------------+
+*              p_tcb->PendDataTblPtr  ->  |  Obj A       |  0           | 0            | 0            | 0            |
+*                                         +--------------+--------------+--------------+--------------+--------------+
+*                                         |  Obj B       |  0           | 0            | 0            | 0            |
+*                                         +--------------+--------------+--------------+--------------+--------------+
+*                                         |  Obj C       |  Obj C       | 0            | 0            | TS           |
+*                                         +--------------+--------------+--------------+--------------+--------------+
+*                                         |  Obj D       |  0           | 0            | 0            | 0            |
+*                                         +--------------+--------------+--------------+--------------+--------------+
+*                                         |  Obj E       |  0           | 0            | 0            | 0            |
+*                                         +--------------+--------------+--------------+--------------+--------------+
+*                                         |  Obj F       |  0           | 0            | 0            | 0            |
+*                                         +--------------+--------------+--------------+--------------+--------------+
+*
+*
+* Arguments  : p_obj        is a pointer to the object being deleted
+*              -----
+*
+*              p_tcb        is the OS_TCB of the task pending on the object being deleted
+*              -----
+*
+*              ts           is the time stamp of when the object was deleted
+*
+* Returns    : none
+*
+* Note(s)    : 1) This function is INTERNAL to uC/OS-III and your application MUST NOT call it.
+************************************************************************************************************************
+*/
+#if (OS_CFG_PEND_MULTI_EN == DEF_ENABLED)
+void  OS_PendObjDel1 (OS_PEND_OBJ  *p_obj,
+                      OS_TCB       *p_tcb,
+                      CPU_TS        ts)
+{
+    OS_OBJ_QTY      n_pend_list;                                /* Number of pend lists                                 */
+    OS_PEND_DATA   *p_pend_data;
+
+
+#if (OS_CFG_TS_EN == DEF_DISABLED)
+    (void)ts;                                                   /* Prevent compiler warning for not using 'ts'          */
+#endif
+
+    p_pend_data = p_tcb->PendDataTblPtr;                        /* Point to the first OS_PEND_DATA to remove            */
+    n_pend_list = p_tcb->PendDataTblEntries;                    /* Get number of entries in the table                   */
+
+    while (n_pend_list > 0u) {                                  /* Mark posted object in OS_PEND_DATA table             */
+        if (p_obj == p_pend_data->PendObjPtr) {                 /* Did we find the object deleted?                      */
+            p_pend_data->RdyObjPtr = p_obj;                     /* Yes, indicate the object in the .RdyObjPtr           */
+#if (OS_CFG_TS_EN == DEF_ENABLED)
+            p_pend_data->RdyTS     = ts;                        /* save the timestamp                                   */
+#endif
+            break;
+        }
+        p_pend_data++;
+        n_pend_list--;
+    }
+}
+#endif
 
 /*
 ************************************************************************************************************************
@@ -1490,35 +2011,43 @@ void  OS_Post (OS_PEND_OBJ  *p_obj,
 #if (OS_CFG_TS_EN == DEF_DISABLED)
     (void)ts;                                                   /* Prevent compiler warning for not using 'ts'          */
 #endif
-#if (OS_MSG_EN == DEF_DISABLED)
-    (void)p_void;
-    (void)msg_size;
-#endif
 
     switch (p_tcb->TaskState) {
-        case OS_TASK_STATE_RDY:                                 /* Cannot Post a task that is ready                     */
-        case OS_TASK_STATE_DLY:                                 /* Cannot Post a task that is delayed                   */
+        case OS_TASK_STATE_RDY:                                 /* Cannot Pend Abort a task that is ready               */
+        case OS_TASK_STATE_DLY:                                 /* Cannot Pend Abort a task that is delayed             */
         case OS_TASK_STATE_SUSPENDED:                           /* Cannot Post a suspended task                         */
         case OS_TASK_STATE_DLY_SUSPENDED:                       /* Cannot Post a suspended task that was also dly'd     */
              break;
 
         case OS_TASK_STATE_PEND:
         case OS_TASK_STATE_PEND_TIMEOUT:
+#if (OS_CFG_PEND_MULTI_EN == DEF_ENABLED)
+             if (p_tcb->PendOn == OS_TASK_PEND_ON_MULTI) {
+                 OS_Post1(p_obj,                                /* Indicate which object was posted to                  */
+                          p_tcb,
+                          p_void,
+                          msg_size,
+                          ts);
+             } else {
+#endif
 #if (OS_MSG_EN == DEF_ENABLED)
-             p_tcb->MsgPtr  = p_void;                           /* Deposit message in OS_TCB of task waiting            */
-             p_tcb->MsgSize = msg_size;                         /* ... assuming posting a message                       */
+                 p_tcb->MsgPtr  = p_void;                       /* Deposit message in OS_TCB of task waiting            */
+                 p_tcb->MsgSize = msg_size;                     /* ... assuming posting a message                       */
 #endif
 #if (OS_CFG_TS_EN == DEF_ENABLED)
                  p_tcb->TS      = ts;
 #endif
-             if (p_obj != (OS_PEND_OBJ *)0) {
-                 OS_PendListRemove(p_tcb);                      /* Remove task from pend list                           */
+#if (OS_CFG_PEND_MULTI_EN == DEF_ENABLED)
              }
-#if (OS_CFG_DBG_EN == DEF_ENABLED)
-             OS_PendDbgNameRemove(p_obj,
-                                  p_tcb);
 #endif
-#if (OS_CFG_TICK_EN == DEF_ENABLED)
+             if (p_obj != DEF_NULL) {
+                 OS_PendListRemove(p_tcb);                      /* Remove task from wait list(s)                        */
+#if (OS_CFG_DBG_EN == DEF_ENABLED)
+                 OS_PendDbgNameRemove(p_obj,
+                                      p_tcb);
+#endif
+             }
+#if (OS_CFG_TASK_TICK_EN == DEF_ENABLED)
              if (p_tcb->TaskState == OS_TASK_STATE_PEND_TIMEOUT) {
                  OS_TickListRemove(p_tcb);                      /* Remove from tick list                                */
              }
@@ -1531,21 +2060,33 @@ void  OS_Post (OS_PEND_OBJ  *p_obj,
 
         case OS_TASK_STATE_PEND_SUSPENDED:
         case OS_TASK_STATE_PEND_TIMEOUT_SUSPENDED:
+#if (OS_CFG_PEND_MULTI_EN == DEF_ENABLED)
+             if (p_tcb->PendOn == OS_TASK_PEND_ON_MULTI) {
+                 OS_Post1(p_obj,                                /* Indicate which object was posted to                  */
+                          p_tcb,
+                          p_void,
+                          msg_size,
+                          ts);
+             } else {
+#endif
 #if (OS_MSG_EN == DEF_ENABLED)
-             p_tcb->MsgPtr  = p_void;                           /* Deposit message in OS_TCB of task waiting            */
-             p_tcb->MsgSize = msg_size;                         /* ... assuming posting a message                       */
+                 p_tcb->MsgPtr  = p_void;                       /* Deposit message in OS_TCB of task waiting            */
+                 p_tcb->MsgSize = msg_size;                     /* ... assuming posting a message                       */
 #endif
 #if (OS_CFG_TS_EN == DEF_ENABLED)
-             p_tcb->TS      = ts;
+                 p_tcb->TS      = ts;
 #endif
-             if (p_obj != (OS_PEND_OBJ *)0) {
-                 OS_PendListRemove(p_tcb);                      /* Remove from pend list                                */
+#if (OS_CFG_PEND_MULTI_EN == DEF_ENABLED)
              }
-#if (OS_CFG_DBG_EN == DEF_ENABLED)
-             OS_PendDbgNameRemove(p_obj,
-                                  p_tcb);
 #endif
-#if (OS_CFG_TICK_EN == DEF_ENABLED)
+             if (p_obj != DEF_NULL) {
+                 OS_PendListRemove(p_tcb);                      /* Remove task from wait list(s)                        */
+#if (OS_CFG_DBG_EN == DEF_ENABLED)
+                 OS_PendDbgNameRemove(p_obj,
+                                      p_tcb);
+#endif
+             }
+#if (OS_CFG_TASK_TICK_EN == DEF_ENABLED)
              if (p_tcb->TaskState == OS_TASK_STATE_PEND_TIMEOUT_SUSPENDED) {
                  OS_TickListRemove(p_tcb);                      /* Cancel any timeout                                   */
              }
@@ -1556,11 +2097,94 @@ void  OS_Post (OS_PEND_OBJ  *p_obj,
              break;
 
         default:
-                                                                /* Default case.                                        */
              break;
     }
 }
 
+
+/*
+************************************************************************************************************************
+*                                           POST TO A TASK PENDING ON MULTIPLE OBJECTS
+*
+* Description: This function is called when a task is pending on multiple objects and the object has been posted to.
+*              This function needs to indicate to the caller which object was posted to by placing the address of the
+*              object in the OS_PEND_DATA table corresponding to the posted object.
+*
+*              For example, if the task pends on six (6) objects, the address of those 6 objects are placed in the
+*              .PendObjPtr field of the OS_PEND_DATA table as shown below.  Note that the .PendDataTblEntries would be
+*              set to six (6) in this case.  As shown, when the pend call returns because a task or an ISR posted to
+*              'Obj C' then, only the one entry contains the filled in data and the other entries contains NULL pointers
+*              and zero data.
+*
+*              You should note that the NULL pointers are zero data values are actually filled in by the pend call.
+*
+*
+*                                           .PendObjPtr    .RdyObjPtr     .RdyMsgPtr     .RdyMsgSize    .RdyTS
+*                                         +--------------+--------------+--------------+--------------+--------------+
+*              p_tcb->PendDataTblPtr  ->  |  Obj A       |  0           | 0            | 0            | 0            |
+*                                         +--------------+--------------+--------------+--------------+--------------+
+*                                         |  Obj B       |  0           | 0            | 0            | 0            |
+*                                         +--------------+--------------+--------------+--------------+--------------+
+*                                         |  Obj C       |  Obj C       | Msg Ptr      | Msg Size     | TS           |
+*                                         +--------------+--------------+--------------+--------------+--------------+
+*                                         |  Obj D       |  0           | 0            | 0            | 0            |
+*                                         +--------------+--------------+--------------+--------------+--------------+
+*                                         |  Obj E       |  0           | 0            | 0            | 0            |
+*                                         +--------------+--------------+--------------+--------------+--------------+
+*                                         |  Obj F       |  0           | 0            | 0            | 0            |
+*                                         +--------------+--------------+--------------+--------------+--------------+
+*
+*
+* Arguments  : p_obj        is a pointer to the object being posted to
+*              -----
+*
+*              p_tcb        is the OS_TCB of the task receiving the signal or the message
+*              -----
+*
+*              p_void       is the actual message (assuming posting to a message queue).  A NULL pointer otherwise.
+*
+*              msg_size     is the size of the message sent (if posted to a message queue)
+*
+*              ts           is the time stamp of when the post occurred
+*
+* Returns    : none
+*
+* Note(s)    : 1) This function is INTERNAL to uC/OS-III and your application MUST NOT call it.
+************************************************************************************************************************
+*/
+#if (OS_CFG_PEND_MULTI_EN == DEF_ENABLED)
+void  OS_Post1 (OS_PEND_OBJ  *p_obj,
+                OS_TCB       *p_tcb,
+                void         *p_void,
+                OS_MSG_SIZE   msg_size,
+                CPU_TS        ts)
+{
+    OS_OBJ_QTY      n_pend_list;                                /* Number of pend lists                                 */
+    OS_PEND_DATA   *p_pend_data;
+
+
+#if (OS_CFG_TS_EN == DEF_DISABLED)
+    (void)ts;                                                   /* Prevent compiler warning for not using 'ts'          */
+#endif
+
+    p_pend_data = p_tcb->PendDataTblPtr;                        /* Point to the first OS_PEND_DATA to remove            */
+    n_pend_list = p_tcb->PendDataTblEntries;                    /* Get number of entries in the table                   */
+
+    while (n_pend_list > 0u) {                                  /* Mark posted object in OS_PEND_DATA table             */
+        if (p_obj == p_pend_data->PendObjPtr) {                 /* Did we find the object posted to?                    */
+            p_pend_data->RdyObjPtr  = p_obj;                    /* Yes, indicate the object in the .RdyObjPtr           */
+            p_pend_data->RdyMsgPtr  = p_void;                   /* store the message posted                             */
+            p_pend_data->RdyMsgSize = msg_size;                 /* store the size of the message posted                 */
+#if (OS_CFG_TS_EN == DEF_ENABLED)
+            p_pend_data->RdyTS      = ts;                       /* save the timestamp of the post                       */
+#endif
+            break;
+        }
+        p_pend_data++;
+        n_pend_list--;
+    }
+}
+#endif
 
 /*
 ************************************************************************************************************************
@@ -1614,10 +2238,10 @@ void  OS_RdyListInit (void)
     for (i = 0u; i < OS_CFG_PRIO_MAX; i++) {                    /* Initialize the array of OS_RDY_LIST at each priority */
         p_rdy_list = &OSRdyList[i];
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
-        p_rdy_list->NbrEntries =           0u;
+        p_rdy_list->NbrEntries = 0u;
 #endif
-        p_rdy_list->HeadPtr    = (OS_TCB *)0;
-        p_rdy_list->TailPtr    = (OS_TCB *)0;
+        p_rdy_list->HeadPtr    = DEF_NULL;
+        p_rdy_list->TailPtr    = DEF_NULL;
     }
 }
 
@@ -1649,7 +2273,9 @@ void  OS_RdyListInsert (OS_TCB  *p_tcb)
         OS_RdyListInsertHead(p_tcb);                            /* No,  insert readied task at the beginning of the list*/
     }
 
-    OS_TRACE_TASK_READY(p_tcb);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+        TRACE_OS_TASK_READY(p_tcb);                             /* Record the event.                                    */
+#endif
 }
 
 
@@ -1717,23 +2343,23 @@ void  OS_RdyListInsertHead (OS_TCB  *p_tcb)
 
 
     p_rdy_list = &OSRdyList[p_tcb->Prio];
-    if (p_rdy_list->HeadPtr == (OS_TCB *)0) {                   /* CASE 0: Insert when there are no entries             */
+    if (p_rdy_list->HeadPtr == DEF_NULL) {                      /* CASE 0: Insert when there are no entries             */
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
-        p_rdy_list->NbrEntries =           1u;                  /* This is the first entry                              */
+        p_rdy_list->NbrEntries =  1u;                           /* This is the first entry                              */
 #endif
-        p_tcb->NextPtr         = (OS_TCB *)0;                   /* No other OS_TCBs in the list                         */
-        p_tcb->PrevPtr         = (OS_TCB *)0;
+        p_tcb->NextPtr         =  DEF_NULL;                     /* No other OS_TCBs in the list                         */
+        p_tcb->PrevPtr         =  DEF_NULL;
         p_rdy_list->HeadPtr    =  p_tcb;                        /* Both list pointers point to this OS_TCB              */
         p_rdy_list->TailPtr    =  p_tcb;
     } else {                                                    /* CASE 1: Insert BEFORE the current head of list       */
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
         p_rdy_list->NbrEntries++;                               /* One more OS_TCB in the list                          */
 #endif
-        p_tcb->NextPtr         =  p_rdy_list->HeadPtr;          /* Adjust new OS_TCBs links                             */
-        p_tcb->PrevPtr         = (OS_TCB *)0;
-        p_tcb2                 =  p_rdy_list->HeadPtr;          /* Adjust old head of list's links                      */
-        p_tcb2->PrevPtr        =  p_tcb;
-        p_rdy_list->HeadPtr    =  p_tcb;
+        p_tcb->NextPtr         = p_rdy_list->HeadPtr;           /* Adjust new OS_TCBs links                             */
+        p_tcb->PrevPtr         = DEF_NULL;
+        p_tcb2                 = p_rdy_list->HeadPtr;           /* Adjust old head of list's links                      */
+        p_tcb2->PrevPtr        = p_tcb;
+        p_rdy_list->HeadPtr    = p_tcb;
     }
 }
 
@@ -1802,23 +2428,23 @@ void  OS_RdyListInsertTail (OS_TCB  *p_tcb)
 
 
     p_rdy_list = &OSRdyList[p_tcb->Prio];
-    if (p_rdy_list->HeadPtr == (OS_TCB *)0) {                   /* CASE 0: Insert when there are no entries             */
+    if (p_rdy_list->HeadPtr == DEF_NULL) {                      /* CASE 0: Insert when there are no entries             */
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
-        p_rdy_list->NbrEntries  =           1u;                 /* This is the first entry                              */
+        p_rdy_list->NbrEntries  = 1u;                           /* This is the first entry                              */
 #endif
-        p_tcb->NextPtr          = (OS_TCB *)0;                  /* No other OS_TCBs in the list                         */
-        p_tcb->PrevPtr          = (OS_TCB *)0;
-        p_rdy_list->HeadPtr     =  p_tcb;                       /* Both list pointers point to this OS_TCB              */
-        p_rdy_list->TailPtr     =  p_tcb;
+        p_tcb->NextPtr          = DEF_NULL;                     /* No other OS_TCBs in the list                         */
+        p_tcb->PrevPtr          = DEF_NULL;
+        p_rdy_list->HeadPtr     = p_tcb;                        /* Both list pointers point to this OS_TCB              */
+        p_rdy_list->TailPtr     = p_tcb;
     } else {                                                    /* CASE 1: Insert AFTER the current tail of list        */
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
         p_rdy_list->NbrEntries++;                               /* One more OS_TCB in the list                          */
 #endif
-        p_tcb->NextPtr          = (OS_TCB *)0;                  /* Adjust new OS_TCBs links                             */
-        p_tcb2                  =  p_rdy_list->TailPtr;
-        p_tcb->PrevPtr          =  p_tcb2;
-        p_tcb2->NextPtr         =  p_tcb;                       /* Adjust old tail of list's links                      */
-        p_rdy_list->TailPtr     =  p_tcb;
+        p_tcb->NextPtr          = DEF_NULL;                     /* Adjust new OS_TCBs links                             */
+        p_tcb2                  = p_rdy_list->TailPtr;
+        p_tcb->PrevPtr          = p_tcb2;
+        p_tcb2->NextPtr         = p_tcb;                        /* Adjust old tail of list's links                      */
+        p_rdy_list->TailPtr     = p_tcb;
     }
 }
 
@@ -1866,7 +2492,7 @@ void  OS_RdyListInsertTail (OS_TCB  *p_tcb)
 *                                             +------------+       +------------+        +------------+
 *
 *
-* Arguments  : p_rdy_list    is a pointer to the OS_RDY_LIST where the OS_TCB will be inserted
+* Arguments  : p_list    is a pointer to the OS_RDY_LIST where the OS_TCB will be inserted
 *              ------
 *
 * Returns    : none
@@ -1884,24 +2510,24 @@ void  OS_RdyListMoveHeadToTail (OS_RDY_LIST  *p_rdy_list)
 
      if (p_rdy_list->HeadPtr != p_rdy_list->TailPtr) {
          if (p_rdy_list->HeadPtr->NextPtr == p_rdy_list->TailPtr) { /* SWAP the TCBs                                    */
-             p_tcb1              =  p_rdy_list->HeadPtr;        /* Point to current head                                */
-             p_tcb2              =  p_rdy_list->TailPtr;        /* Point to current tail                                */
-             p_tcb1->PrevPtr     =  p_tcb2;
-             p_tcb1->NextPtr     = (OS_TCB *)0;
-             p_tcb2->PrevPtr     = (OS_TCB *)0;
-             p_tcb2->NextPtr     =  p_tcb1;
-             p_rdy_list->HeadPtr =  p_tcb2;
-             p_rdy_list->TailPtr =  p_tcb1;
+             p_tcb1              = p_rdy_list->HeadPtr;         /* Point to current head                                */
+             p_tcb2              = p_rdy_list->TailPtr;         /* Point to current tail                                */
+             p_tcb1->PrevPtr     = p_tcb2;
+             p_tcb1->NextPtr     = DEF_NULL;
+             p_tcb2->PrevPtr     = DEF_NULL;
+             p_tcb2->NextPtr     = p_tcb1;
+             p_rdy_list->HeadPtr = p_tcb2;
+             p_rdy_list->TailPtr = p_tcb1;
          } else {
-             p_tcb1              =  p_rdy_list->HeadPtr;        /* Point to current head                                */
-             p_tcb2              =  p_rdy_list->TailPtr;        /* Point to current tail                                */
-             p_tcb3              =  p_tcb1->NextPtr;            /* Point to new list head                               */
-             p_tcb3->PrevPtr     = (OS_TCB *)0;                 /* Adjust back    link of new list head                 */
-             p_tcb1->NextPtr     = (OS_TCB *)0;                 /* Adjust forward link of new list tail                 */
-             p_tcb1->PrevPtr     =  p_tcb2;                     /* Adjust back    link of new list tail                 */
-             p_tcb2->NextPtr     =  p_tcb1;                     /* Adjust forward link of old list tail                 */
-             p_rdy_list->HeadPtr =  p_tcb3;                     /* Adjust new list head and tail pointers               */
-             p_rdy_list->TailPtr =  p_tcb1;
+             p_tcb1              = p_rdy_list->HeadPtr;         /* Point to current head                                */
+             p_tcb2              = p_rdy_list->TailPtr;         /* Point to current tail                                */
+             p_tcb3              = p_tcb1->NextPtr;             /* Point to new list head                               */
+             p_tcb3->PrevPtr     = DEF_NULL;                    /* Adjust back    link of new list head                 */
+             p_tcb1->NextPtr     = DEF_NULL;                    /* Adjust forward link of new list tail                 */
+             p_tcb1->PrevPtr     = p_tcb2;                      /* Adjust back    link of new list tail                 */
+             p_tcb2->NextPtr     = p_tcb1;                      /* Adjust forward link of old list tail                 */
+             p_rdy_list->HeadPtr = p_tcb3;                      /* Adjust new list head and tail pointers               */
+             p_rdy_list->TailPtr = p_tcb1;
          }
      }
 }
@@ -1966,37 +2592,78 @@ void  OS_RdyListRemove (OS_TCB  *p_tcb)
     p_rdy_list = &OSRdyList[p_tcb->Prio];
     p_tcb1     = p_tcb->PrevPtr;                                /* Point to next and previous OS_TCB in the list        */
     p_tcb2     = p_tcb->NextPtr;
-    if (p_tcb1 == (OS_TCB *)0) {                                /* Was the OS_TCB to remove at the head?                */
-        if (p_tcb2 == (OS_TCB *)0) {                            /* Yes, was it the only OS_TCB?                         */
+    if (p_tcb1 == DEF_NULL) {                                   /* Was the OS_TCB to remove at the head?                */
+        if (p_tcb2 == DEF_NULL) {                               /* Yes, was it the only OS_TCB?                         */
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
-            p_rdy_list->NbrEntries =           0u;              /* Yes, no more entries                                 */
+            p_rdy_list->NbrEntries = 0u;                        /* Yes, no more entries                                 */
 #endif
-            p_rdy_list->HeadPtr    = (OS_TCB *)0;
-            p_rdy_list->TailPtr    = (OS_TCB *)0;
+            p_rdy_list->HeadPtr    = DEF_NULL;
+            p_rdy_list->TailPtr    = DEF_NULL;
             OS_PrioRemove(p_tcb->Prio);
         } else {
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
             p_rdy_list->NbrEntries--;                           /* No,  one less entry                                  */
 #endif
-            p_tcb2->PrevPtr     = (OS_TCB *)0;                  /* adjust back link of new list head                    */
-            p_rdy_list->HeadPtr =  p_tcb2;                      /* adjust OS_RDY_LIST's new head                        */
+            p_tcb2->PrevPtr     = DEF_NULL;                     /* adjust back link of new list head                    */
+            p_rdy_list->HeadPtr = p_tcb2;                       /* adjust OS_RDY_LIST's new head                        */
         }
     } else {
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
         p_rdy_list->NbrEntries--;                               /* No,  one less entry                                  */
 #endif
         p_tcb1->NextPtr = p_tcb2;
-        if (p_tcb2 == (OS_TCB *)0) {
+        if (p_tcb2 == DEF_NULL) {
             p_rdy_list->TailPtr = p_tcb1;                       /* Removing the TCB at the tail, adj the tail ptr       */
         } else {
             p_tcb2->PrevPtr     = p_tcb1;
         }
     }
-    p_tcb->PrevPtr = (OS_TCB *)0;
-    p_tcb->NextPtr = (OS_TCB *)0;
+    p_tcb->PrevPtr = DEF_NULL;
+    p_tcb->NextPtr = DEF_NULL;
 
-    OS_TRACE_TASK_SUSPENDED(p_tcb);
+#if (defined(TRACE_CFG_EN) && (TRACE_CFG_EN == DEF_ENABLED))
+    TRACE_OS_TASK_SUSPEND(p_tcb);                               /* Record the event.                                    */
+#endif
 }
+
+
+/*
+************************************************************************************************************************
+*                                             SCHEDULE THE ISR HANDLER TASK
+*
+* Description: This function is called by other uC/OS-III services to schedule task at priority 0 which is always the
+*              ISR handler task.
+*
+* Arguments  : none
+*
+* Returns    : none
+*
+* Note(s)    : 1) This function is INTERNAL to uC/OS-III and your application MUST NOT call it.
+*
+*              2) This function is DEPRECATED, see OS_IntQPost() note 1 for details.
+************************************************************************************************************************
+*/
+
+#if (OS_CFG_ISR_POST_DEFERRED_EN == DEF_ENABLED)
+void  OS_Sched0 (void)
+{
+    CPU_SR_ALLOC();
+
+
+
+    CPU_INT_DIS();
+    OSPrioHighRdy   =  0u;                                      /* Force the priority to 0                              */
+    OSTCBHighRdyPtr = &OSIntQTaskTCB;                           /* Always schedule the ISR handler task                 */
+#if (OS_CFG_TASK_PROFILE_EN == DEF_ENABLED)
+    OSTCBHighRdyPtr->CtxSwCtr++;                                /* Inc. # of context switches to this task              */
+#endif
+#if ((OS_CFG_TASK_PROFILE_EN == DEF_ENABLED) || (OS_CFG_DBG_EN == DEF_ENABLED))
+    OSTaskCtxSwCtr++;                                           /* Increment context switch counter                     */
+#endif
+    OS_TASK_SW();                                               /* Perform a task level context switch                  */
+    CPU_INT_EN();
+}
+#endif
 
 
 /*
@@ -2013,10 +2680,10 @@ void  OS_RdyListRemove (OS_TCB  *p_tcb)
 *
 *              2) It's assumed that these functions are called when interrupts are disabled.
 *
-*              3) We are reading the time stamp timer via OS_TS_GET() directly even if this is a 16-bit timer.  The
-*                 reason is that we don't expect to have the scheduler locked for 65536 counts even at the rate the TS
-*                 timer is updated.  In other words, locking the scheduler for longer than 65536 count would not be a
-*                 good thing for a real-time system.
+*              3) We are reading the CPU_TS_TmrRd() directly even if this is a 16-bit timer.  The reason is that we
+*                 don't expect to have the scheduler locked for 65536 counts even at the rate the TS timer is updated.
+*                 In other words, locking the scheduler for longer than 65536 count would not be a good thing for a
+*                 real-time system.
 ************************************************************************************************************************
 */
 
@@ -2024,7 +2691,7 @@ void  OS_RdyListRemove (OS_TCB  *p_tcb)
 void  OS_SchedLockTimeMeasStart (void)
 {
     if (OSSchedLockNestingCtr == 1u) {
-        OSSchedLockTimeBegin = OS_TS_GET();
+        OSSchedLockTimeBegin = CPU_TS_TmrRd();
     }
 }
 
@@ -2037,7 +2704,7 @@ void  OS_SchedLockTimeMeasStop (void)
 
 
     if (OSSchedLockNestingCtr == 0u) {                          /* Make sure we fully un-nested scheduler lock          */
-        delta = OS_TS_GET()                                     /* Compute the delta time between begin and end         */
+        delta = CPU_TS_TmrRd()                                  /* Compute the delta time between begin and end         */
               - OSSchedLockTimeBegin;
         if (OSSchedLockTimeMax    < delta) {                    /* Detect peak value                                    */
             OSSchedLockTimeMax    = delta;
@@ -2069,7 +2736,7 @@ void  OS_SchedLockTimeMeasStop (void)
 #if (OS_CFG_SCHED_ROUND_ROBIN_EN == DEF_ENABLED)
 void  OS_SchedRoundRobin (OS_RDY_LIST  *p_rdy_list)
 {
-    OS_TCB  *p_tcb;
+    OS_TCB   *p_tcb;
     CPU_SR_ALLOC();
 
 
@@ -2080,7 +2747,7 @@ void  OS_SchedRoundRobin (OS_RDY_LIST  *p_rdy_list)
     CPU_CRITICAL_ENTER();
     p_tcb = p_rdy_list->HeadPtr;                                /* Decrement time quanta counter                        */
 
-    if (p_tcb == (OS_TCB *)0) {
+    if (p_tcb == DEF_NULL) {
         CPU_CRITICAL_EXIT();
         return;
     }
@@ -2144,26 +2811,24 @@ void  OS_SchedRoundRobin (OS_RDY_LIST  *p_rdy_list)
 void  OS_TaskBlock (OS_TCB   *p_tcb,
                     OS_TICK   timeout)
 {
+#if (OS_CFG_TASK_TICK_EN == DEF_ENABLED)
 #if (OS_CFG_DYN_TICK_EN == DEF_ENABLED)
-    OS_TICK  elapsed;
-
-
-    elapsed = OS_DynTickGet();
+        OS_TICK tick_ctr;
 #endif
 
-#if (OS_CFG_TICK_EN     == DEF_ENABLED)
+
     if (timeout > 0u) {                                         /* Add task to tick list if timeout non zero            */
 #if (OS_CFG_DYN_TICK_EN == DEF_ENABLED)
-        (void)OS_TickListInsert(p_tcb, elapsed, (OSTickCtr + elapsed), timeout);
+        tick_ctr = BSP_OS_TickGet();
+        OS_TickListInsert(&OSTickListTimeout, p_tcb, timeout + (tick_ctr - OSTickCtr));
 #else
-        (void)OS_TickListInsert(p_tcb,      0u,             OSTickCtr, timeout);
+        OS_TickListInsert(&OSTickListTimeout, p_tcb, timeout);
 #endif
         p_tcb->TaskState = OS_TASK_STATE_PEND_TIMEOUT;
     } else {
         p_tcb->TaskState = OS_TASK_STATE_PEND;
     }
 #else
-    (void)timeout;
     p_tcb->TaskState = OS_TASK_STATE_PEND;
 #endif
     OS_RdyListRemove(p_tcb);

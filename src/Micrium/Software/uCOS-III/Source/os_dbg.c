@@ -1,34 +1,35 @@
 /*
-*********************************************************************************************************
-*                                                uC/OS-III
-*                                          The Real-Time Kernel
+************************************************************************************************************************
+*                                                      uC/OS-III
+*                                                 The Real-Time Kernel
 *
-*                         (c) Copyright 2009-2018; Silicon Laboratories Inc.,
-*                                400 W. Cesar Chavez, Austin, TX 78701
+*                                  (c) Copyright 2009-2015; Micrium, Inc.; Weston, FL
+*                           All rights reserved.  Protected by international copyright laws.
 *
-*                   All rights reserved. Protected by international copyright laws.
+*                                                  DEBUGGER CONSTANTS
 *
-*                  Your use of this software is subject to your acceptance of the terms
-*                  of a Silicon Labs Micrium software license, which can be obtained by
-*                  contacting info@micrium.com. If you do not agree to the terms of this
-*                  license, you may not use this software.
+* File    : OS_DBG.C
+* By      : JJL
+* Version : V3.05.01
 *
-*                  Please help us continue to provide the Embedded community with the finest
-*                  software available. Your honesty is greatly appreciated.
+* LICENSING TERMS:
+* ---------------
+*           uC/OS-III is provided in source form for FREE short-term evaluation, for educational use or
+*           for peaceful research.  If you plan or intend to use uC/OS-III in a commercial application/
+*           product then, you need to contact Micrium to properly license uC/OS-III for its use in your
+*           application/product.   We provide ALL the source code for your convenience and to help you
+*           experience uC/OS-III.  The fact that the source is provided does NOT mean that you can use
+*           it commercially without paying a licensing fee.
 *
-*                    You can find our product's documentation at: doc.micrium.com
+*           Knowledge of the source code may NOT be used to develop a similar product.
 *
-*                          For more information visit us at: www.micrium.com
-*********************************************************************************************************
-*/
-
-/*
-*********************************************************************************************************
-*                                          DEBUGGER CONSTANTS
+*           Please help us continue to provide the embedded community with the finest software available.
+*           Your honesty is greatly appreciated.
 *
-* File    : os_dbg.c
-* Version : V3.07.03
-*********************************************************************************************************
+*           You can find our product's user manual, API reference, release notes and
+*           more information at https://doc.micrium.com.
+*           You can contact us at www.micrium.com.
+************************************************************************************************************************
 */
 
 #define  MICRIUM_SOURCE
@@ -38,15 +39,7 @@
 const  CPU_CHAR  *os_dbg__c = "$Id: $";
 #endif
 
-
-/*
-************************************************************************************************************************
-*                                                     CONSTANTS
-************************************************************************************************************************
-*/
-
 CPU_INT08U  const  OSDbg_DbgEn                 = OS_CFG_DBG_EN;                /* Debug constants are defined below   */
-
 
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
 
@@ -78,6 +71,14 @@ CPU_INT08U  const  OSDbg_FlagPendAbortEn       = 0u;
 CPU_INT16U  const  OSDbg_FlagGrpSize           = 0u;
 CPU_INT16U  const  OSDbg_FlagWidth             = 0u;
 #endif
+
+#if (OS_CFG_ISR_POST_DEFERRED_EN == DEF_ENABLED)
+CPU_INT16U  const  OSDbg_IntQ                  = sizeof(OS_INT_Q);
+#else
+CPU_INT16U  const  OSDbg_IntQ                  = 0u;
+#endif
+
+CPU_INT08U  const  OSDbg_ISRPostDeferredEn     = OS_CFG_ISR_POST_DEFERRED_EN;
 
 OS_MEM      const  OSDbg_Mem                   = { 0u };
 CPU_INT08U  const  OSDbg_MemEn                 = OS_CFG_MEM_EN;
@@ -116,6 +117,8 @@ CPU_INT16U  const  OSDbg_MutexSize             = 0u;
 CPU_INT08U  const  OSDbg_ObjTypeChkEn          = OS_CFG_OBJ_TYPE_CHK_EN;
 
 
+CPU_INT08U  const  OSDbg_PendMultiEn           = OS_CFG_PEND_MULTI_EN;
+CPU_INT16U  const  OSDbg_PendDataSize          = sizeof(OS_PEND_DATA);
 CPU_INT16U  const  OSDbg_PendListSize          = sizeof(OS_PEND_LIST);
 CPU_INT16U  const  OSDbg_PendObjSize           = sizeof(OS_PEND_OBJ);
 
@@ -235,30 +238,19 @@ CPU_INT32U  const  OSDbg_DataSize = sizeof(OSIntNestingCtr)
 #endif
 
 #ifdef CPU_CFG_INT_DIS_MEAS_EN
-#if (OS_CFG_TS_EN == DEF_ENABLED)
                                   + sizeof(OSIntDisTimeMax)
 #endif
-#endif
 
-#if (OS_CFG_STAT_TASK_STK_CHK_EN == DEF_ENABLED) && (OS_CFG_ISR_STK_SIZE > 0)
-                                  + sizeof(OSISRStkFree)
-                                  + sizeof(OSISRStkUsed)
+#if OS_CFG_ISR_POST_DEFERRED_EN > 0u
+                                  + sizeof(OSIntQInPtr)
+                                  + sizeof(OSIntQOutPtr)
+                                  + sizeof(OSIntQNbrEntries)
+                                  + sizeof(OSIntQNbrEntriesMax)
+                                  + sizeof(OSIntQOvfCtr)
+                                  + sizeof(OSIntQTaskTCB)
+#if (OS_CFG_TS_EN == DEF_ENABLED)
+                                  + sizeof(OSIntQTaskTimeMax)
 #endif
-
-#if (OS_CFG_ISR_STK_SIZE > 0)
-                                  + OS_CFG_ISR_STK_SIZE       * sizeof(CPU_STK)
-#endif
-
-#if (OS_CFG_TASK_IDLE_EN == DEF_ENABLED)
-                                  + OS_CFG_IDLE_TASK_STK_SIZE * sizeof(CPU_STK)
-#endif
-
-#if (OS_CFG_TASK_STAT_EN == DEF_ENABLED)
-                                  + OS_CFG_STAT_TASK_STK_SIZE * sizeof(CPU_STK)
-#endif
-
-#if (OS_CFG_TMR_EN == DEF_ENABLED)
-                                  + OS_CFG_TMR_TASK_STK_SIZE  * sizeof(CPU_STK)
 #endif
 
                                   + sizeof(OSRunning)
@@ -272,6 +264,13 @@ CPU_INT32U  const  OSDbg_DataSize = sizeof(OSIntNestingCtr)
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
                                   + sizeof(OSFlagDbgListPtr)
                                   + sizeof(OSFlagQty)
+#endif
+#endif
+
+#if (OS_CFG_MON_EN == DEF_ENABLED)
+#if (OS_CFG_DBG_EN == DEF_ENABLED)
+                                  + sizeof(OSMonDbgListPtr)
+                                  + sizeof(OSMonQty)
 #endif
 #endif
 
@@ -295,6 +294,9 @@ CPU_INT32U  const  OSDbg_DataSize = sizeof(OSIntNestingCtr)
 
                                   + sizeof(OSPrioCur)
                                   + sizeof(OSPrioHighRdy)
+#if (OS_CFG_ISR_POST_DEFERRED_EN == DEF_ENABLED)
+                                  + sizeof(OSPrioSaved)
+#endif
                                   + sizeof(OSPrioTbl)
 
 #if (OS_CFG_Q_EN == DEF_ENABLED)
@@ -345,19 +347,18 @@ CPU_INT32U  const  OSDbg_DataSize = sizeof(OSIntNestingCtr)
                                   + sizeof(OSStatTaskRdy)
                                   + sizeof(OSStatTaskTCB)
 #if (OS_CFG_TS_EN == DEF_ENABLED)
-                                  + sizeof(OSStatTaskTime)
                                   + sizeof(OSStatTaskTimeMax)
 #endif
 #endif
 
-#if (OS_CFG_TICK_EN == DEF_ENABLED)
+#if (OS_CFG_TASK_TICK_EN == DEF_ENABLED)
                                   + sizeof(OSTickCtr)
-                                  + sizeof(OSTickList)
+                                  + sizeof(OSTickTaskTCB)
 #if (OS_CFG_TS_EN == DEF_ENABLED)
-                                  + sizeof(OSTickTime)
-                                  + sizeof(OSTickTimeMax)
+                                  + sizeof(OSTickTaskTimeMax)
 #endif
-
+                                  + sizeof(OSTickListDly)
+                                  + sizeof(OSTickListTimeout)
 #endif
 
 #if (OS_CFG_TMR_EN == DEF_ENABLED)
@@ -366,18 +367,19 @@ CPU_INT32U  const  OSDbg_DataSize = sizeof(OSIntNestingCtr)
                                   + sizeof(OSTmrListEntries)
 #endif
                                   + sizeof(OSTmrListPtr)
+#if (OS_CFG_MUTEX_EN == DEF_ENABLED)
                                   + sizeof(OSTmrMutex)
-                                  + sizeof(OSTmrCond)
+#endif
 #if (OS_CFG_DBG_EN == DEF_ENABLED)
                                   + sizeof(OSTmrQty)
 #endif
                                   + sizeof(OSTmrTaskTCB)
-                                  + sizeof(OSTmrTaskTickBase)
-                                  + sizeof(OSTmrToTicksMult)
 #if (OS_CFG_TS_EN == DEF_ENABLED)
-                                  + sizeof(OSTmrTaskTime)
                                   + sizeof(OSTmrTaskTimeMax)
 #endif
+                                  + sizeof(OSTmrTickCtr)
+                                  + sizeof(OSTmrUpdateCnt)
+                                  + sizeof(OSTmrUpdateCtr)
 #endif
 
 #if (OS_CFG_TASK_REG_TBL_SIZE > 0u)
@@ -409,9 +411,9 @@ CPU_INT32U  const  OSDbg_DataSize = sizeof(OSIntNestingCtr)
 
 void  OS_Dbg_Init (void)
 {
-    CPU_INT08U const * volatile  p_temp08;
-    CPU_INT16U const * volatile  p_temp16;
-    CPU_INT32U const * volatile  p_temp32;
+    CPU_INT08U const  *p_temp08;
+    CPU_INT16U const  *p_temp16;
+    CPU_INT32U const  *p_temp32;
 
 
     p_temp08 = (CPU_INT08U const *)&OSDbg_DbgEn;
@@ -434,6 +436,12 @@ void  OS_Dbg_Init (void)
     p_temp16 = (CPU_INT16U const *)&OSDbg_FlagGrpSize;
     p_temp16 = (CPU_INT16U const *)&OSDbg_FlagWidth;
 #endif
+
+#if (OS_CFG_ISR_POST_DEFERRED_EN == DEF_ENABLED)
+    p_temp16 = (CPU_INT16U const *)&OSDbg_IntQ;
+#endif
+
+    p_temp08 = (CPU_INT08U const *)&OSDbg_ISRPostDeferredEn;
 
     p_temp16 = (CPU_INT16U const *)&OSDbg_Mem;
     p_temp08 = (CPU_INT08U const *)&OSDbg_MemEn;
@@ -458,6 +466,8 @@ void  OS_Dbg_Init (void)
 
     p_temp08 = (CPU_INT08U const *)&OSDbg_ObjTypeChkEn;
 
+    p_temp08 = (CPU_INT08U const *)&OSDbg_PendMultiEn;
+    p_temp16 = (CPU_INT16U const *)&OSDbg_PendDataSize;
     p_temp16 = (CPU_INT16U const *)&OSDbg_PendListSize;
     p_temp16 = (CPU_INT16U const *)&OSDbg_PendObjSize;
 
@@ -510,7 +520,6 @@ void  OS_Dbg_Init (void)
     p_temp08 = (CPU_INT08U const *)&OSDbg_TimeDlyHMSMEn;
     p_temp08 = (CPU_INT08U const *)&OSDbg_TimeDlyResumeEn;
 
-    p_temp16 = (CPU_INT16U const *)&OSDbg_TLS_TblSize;
 
     p_temp16 = (CPU_INT16U const *)&OSDbg_Tmr;
     p_temp08 = (CPU_INT08U const *)&OSDbg_TmrEn;

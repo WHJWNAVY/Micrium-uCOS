@@ -1,34 +1,35 @@
 /*
-*********************************************************************************************************
-*                                                uC/OS-III
-*                                          The Real-Time Kernel
+************************************************************************************************************************
+*                                                      uC/OS-III
+*                                                 The Real-Time Kernel
 *
-*                         (c) Copyright 2009-2018; Silicon Laboratories Inc.,
-*                                400 W. Cesar Chavez, Austin, TX 78701
+*                                  (c) Copyright 2009-2015; Micrium, Inc.; Weston, FL
+*                           All rights reserved.  Protected by international copyright laws.
 *
-*                   All rights reserved. Protected by international copyright laws.
+*                                                  STATISTICS MODULE
 *
-*                  Your use of this software is subject to your acceptance of the terms
-*                  of a Silicon Labs Micrium software license, which can be obtained by
-*                  contacting info@micrium.com. If you do not agree to the terms of this
-*                  license, you may not use this software.
+* File    : OS_STAT.C
+* By      : JJL
+* Version : V3.05.01
 *
-*                  Please help us continue to provide the Embedded community with the finest
-*                  software available. Your honesty is greatly appreciated.
+* LICENSING TERMS:
+* ---------------
+*           uC/OS-III is provided in source form for FREE short-term evaluation, for educational use or 
+*           for peaceful research.  If you plan or intend to use uC/OS-III in a commercial application/
+*           product then, you need to contact Micrium to properly license uC/OS-III for its use in your 
+*           application/product.   We provide ALL the source code for your convenience and to help you 
+*           experience uC/OS-III.  The fact that the source is provided does NOT mean that you can use 
+*           it commercially without paying a licensing fee.
 *
-*                    You can find our product's documentation at: doc.micrium.com
+*           Knowledge of the source code may NOT be used to develop a similar product.
 *
-*                          For more information visit us at: www.micrium.com
-*********************************************************************************************************
-*/
-
-/*
-*********************************************************************************************************
-*                                           STATISTICS MODULE
+*           Please help us continue to provide the embedded community with the finest software available.
+*           Your honesty is greatly appreciated.
 *
-* File    : os_stat.c
-* Version : V3.07.03
-*********************************************************************************************************
+*           You can find our product's user manual, API reference, release notes and
+*           more information at https://doc.micrium.com.
+*           You can contact us at www.micrium.com.
+************************************************************************************************************************
 */
 
 #define  MICRIUM_SOURCE
@@ -73,13 +74,20 @@ void  OSStatReset (OS_ERR  *p_err)
 
 
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return;
     }
 #endif
 
     CPU_CRITICAL_ENTER();
+#if (OS_CFG_ISR_POST_DEFERRED_EN == DEF_ENABLED)
+#if (OS_CFG_TS_EN == DEF_ENABLED)
+    OSIntQTaskTimeMax     = 0u;                                 /* Reset the task execution times                       */
+#endif
+    OSIntQNbrEntriesMax   = 0u;                                 /* Reset the queue maximum number of entries            */
+#endif
+
 #if (OS_CFG_STAT_TASK_EN == DEF_ENABLED)
     OSStatTaskCPUUsageMax = 0u;
 #if (OS_CFG_TS_EN == DEF_ENABLED)
@@ -87,14 +95,12 @@ void  OSStatReset (OS_ERR  *p_err)
 #endif
 #endif
 
-#if (OS_CFG_TS_EN == DEF_ENABLED) && (OS_CFG_TICK_EN == DEF_ENABLED)
-    OSTickTime            = 0u;
-    OSTickTimeMax         = 0u;
+#if (OS_CFG_TS_EN == DEF_ENABLED)
+    OSTickTaskTimeMax     = 0u;
 #endif
 
 #if (OS_CFG_TMR_EN == DEF_ENABLED)
 #if (OS_CFG_TS_EN == DEF_ENABLED)
-    OSTmrTaskTime         = 0u;
     OSTmrTaskTimeMax      = 0u;
 #endif
 #endif
@@ -102,7 +108,6 @@ void  OSStatReset (OS_ERR  *p_err)
 #ifdef CPU_CFG_INT_DIS_MEAS_EN
 #if (OS_CFG_TS_EN == DEF_ENABLED)
     OSIntDisTimeMax       = 0u;                                 /* Reset the maximum interrupt disable time             */
-    CPU_StatReset();                                            /* Reset CPU-specific performance monitors.             */
 #endif
 #endif
 
@@ -119,7 +124,7 @@ void  OSStatReset (OS_ERR  *p_err)
     CPU_CRITICAL_ENTER();
     p_tcb = OSTaskDbgListPtr;
     CPU_CRITICAL_EXIT();
-    while (p_tcb != (OS_TCB *)0) {                              /* Reset per-Task statistics                            */
+    while (p_tcb != DEF_NULL) {                                 /* Reset per-Task statistics                            */
         CPU_CRITICAL_ENTER();
 
 #ifdef CPU_CFG_INT_DIS_MEAS_EN
@@ -158,7 +163,7 @@ void  OSStatReset (OS_ERR  *p_err)
     CPU_CRITICAL_ENTER();
     p_q = OSQDbgListPtr;
     CPU_CRITICAL_EXIT();
-    while (p_q != (OS_Q *)0) {                                  /* Reset message queues statistics                      */
+    while (p_q != DEF_NULL) {                                   /* Reset message queues statistics                      */
         CPU_CRITICAL_ENTER();
         p_msg_q                = &p_q->MsgQ;
         p_msg_q->NbrEntriesMax = 0u;
@@ -203,10 +208,9 @@ void  OSStatTaskCPUUsageInit (OS_ERR  *p_err)
     CPU_SR_ALLOC();
 
 
-    err = OS_ERR_NONE;                                          /* Initialize err explicitly for static analysis.       */
 
 #ifdef OS_SAFETY_CRITICAL
-    if (p_err == (OS_ERR *)0) {
+    if (p_err == DEF_NULL) {
         OS_SAFETY_CRITICAL_EXCEPTION();
         return;
     }
@@ -315,13 +319,10 @@ void  OS_StatTask (void  *p_arg)
     OS_TICK      dly;
 #if (OS_CFG_TS_EN == DEF_ENABLED)
     CPU_TS       ts_start;
-#endif
-#if (OS_CFG_STAT_TASK_STK_CHK_EN == DEF_ENABLED) && (OS_CFG_ISR_STK_SIZE > 0u)
-    CPU_STK     *p_stk;
-    CPU_INT32U   free_stk;
-    CPU_INT32U   size_stk;
+    CPU_TS       ts_end;
 #endif
     CPU_SR_ALLOC();
+
 
 
     (void)p_arg;                                                /* Prevent compiler warning for not using 'p_arg'       */
@@ -341,12 +342,12 @@ void  OS_StatTask (void  *p_arg)
         dly =  (OSCfg_TickRate_Hz / 10u);
     }
 
-    for (;;) {
+    while (DEF_ON) {
 #if (OS_CFG_TS_EN == DEF_ENABLED)
         ts_start        = OS_TS_GET();
+#endif
 #ifdef  CPU_CFG_INT_DIS_MEAS_EN
         OSIntDisTimeMax = CPU_IntDisMeasMaxGet();
-#endif
 #endif
 
         CPU_CRITICAL_ENTER();                                   /* ---------------- OVERALL CPU USAGE ----------------- */
@@ -372,7 +373,7 @@ void  OS_StatTask (void  *p_arg)
                 ctr_div  = 10000u;
             }
             ctr_max            = OSStatTaskCtrMax / ctr_div;
-            OSStatTaskCPUUsage = (OS_CPU_USAGE)((OS_TICK)10000u - ((ctr_mult * OSStatTaskCtrRun) / ctr_max));
+            OSStatTaskCPUUsage = (OS_CPU_USAGE)((OS_TICK)10000u - ctr_mult * OSStatTaskCtrRun / ctr_max);
             if (OSStatTaskCPUUsageMax < OSStatTaskCPUUsage) {
                 OSStatTaskCPUUsageMax = OSStatTaskCPUUsage;
             }
@@ -390,11 +391,11 @@ void  OS_StatTask (void  *p_arg)
         CPU_CRITICAL_ENTER();
         p_tcb = OSTaskDbgListPtr;
         CPU_CRITICAL_EXIT();
-        while (p_tcb != (OS_TCB *)0) {                          /* ---------------- TOTAL CYCLES COUNT ---------------- */
-            CPU_CRITICAL_ENTER();
+        while (p_tcb != DEF_NULL) {                             /* ---------------- TOTAL CYCLES COUNT ---------------- */
+            OS_CRITICAL_ENTER();
             p_tcb->CyclesTotalPrev = p_tcb->CyclesTotal;        /* Save accumulated # cycles into a temp variable       */
             p_tcb->CyclesTotal     = 0u;                        /* Reset total cycles for task for next run             */
-            CPU_CRITICAL_EXIT();
+            OS_CRITICAL_EXIT();
 
             cycles_total          += p_tcb->CyclesTotalPrev;    /* Perform sum of all task # cycles                     */
 
@@ -433,7 +434,7 @@ void  OS_StatTask (void  *p_arg)
         CPU_CRITICAL_ENTER();
         p_tcb = OSTaskDbgListPtr;
         CPU_CRITICAL_EXIT();
-        while (p_tcb != (OS_TCB *)0) {
+        while (p_tcb != DEF_NULL) {
 #if (OS_CFG_TASK_PROFILE_EN == DEF_ENABLED)                     /* Compute execution time of each task                  */
             usage = (OS_CPU_USAGE)(cycles_mult * p_tcb->CyclesTotalPrev / cycles_max);
             if (usage > 10000u) {
@@ -458,50 +459,15 @@ void  OS_StatTask (void  *p_arg)
         }
 #endif
 
-                                                                /*------------------ Check ISR Stack -------------------*/
-#if (OS_CFG_STAT_TASK_STK_CHK_EN == DEF_ENABLED) && (OS_CFG_ISR_STK_SIZE > 0u)
-        free_stk  = 0u;
-#if (CPU_CFG_STK_GROWTH == CPU_STK_GROWTH_HI_TO_LO)
-        p_stk     = OSCfg_ISRStkBasePtr;                        /*   Start at the lowest memory and go up               */
-#if (OS_CFG_TASK_STK_REDZONE_EN == DEF_ENABLED)
-        p_stk    += OS_CFG_TASK_STK_REDZONE_DEPTH;
-        size_stk  = OSCfg_ISRStkSize - OS_CFG_TASK_STK_REDZONE_DEPTH;
-#else
-        size_stk  = OSCfg_ISRStkSize;
-#endif
-        while ((*p_stk == 0u) && (free_stk < size_stk)) {       /*   Compute the number of zero entries on the stk      */
-            p_stk++;
-            free_stk++;
-        }
-#else
-        p_stk     = OSCfg_ISRStkBasePtr + OSCfg_ISRStkSize - 1u;/*   Start at the highest memory and go down            */
-#if (OS_CFG_TASK_STK_REDZONE_EN == DEF_ENABLED)
-        p_stk    -= OS_CFG_TASK_STK_REDZONE_DEPTH;
-        size_stk  = OSCfg_ISRStkSize - OS_CFG_TASK_STK_REDZONE_DEPTH;
-#else
-        size_stk  = OSCfg_ISRStkSize;
-#endif
-        while ((*p_stk == 0u) && (free_stk < size_stk)) {       /*   Compute the number of zero entries on the stk      */
-            free_stk++;
-            p_stk--;
-        }
-#endif
-#if (OS_CFG_TASK_STK_REDZONE_EN == DEF_ENABLED)
-        free_stk     -= OS_CFG_TASK_STK_REDZONE_DEPTH;          /*   Compensate for stack elements used by Redzone.     */
-#endif
-        OSISRStkFree  = free_stk;
-        OSISRStkUsed  = OSCfg_ISRStkSize - free_stk;
-#endif
-
         if (OSStatResetFlag == DEF_TRUE) {                      /* Check if need to reset statistics                    */
             OSStatResetFlag  = DEF_FALSE;
             OSStatReset(&err);
         }
 
 #if (OS_CFG_TS_EN == DEF_ENABLED)
-        OSStatTaskTime = OS_TS_GET() - ts_start;                /*----- Measure execution time of statistic task -------*/
-        if (OSStatTaskTimeMax < OSStatTaskTime) {
-            OSStatTaskTimeMax = OSStatTaskTime;
+        ts_end = OS_TS_GET() - ts_start;                        /* Measure execution time of statistic task             */
+        if (OSStatTaskTimeMax < ts_end) {
+            OSStatTaskTimeMax = ts_end;
         }
 #endif
 
@@ -520,11 +486,11 @@ void  OS_StatTask (void  *p_arg)
 *
 * Argument(s): p_err     is a pointer to a variable that will contain an error code returned by this function.
 *
-*                            OS_ERR_STAT_STK_INVALID       If you specified a NULL stack pointer during configuration
-*                            OS_ERR_STAT_STK_SIZE_INVALID  If you didn't specify a large enough stack.
-*                            OS_ERR_STAT_PRIO_INVALID      If you specified a priority for the statistic task equal to or
-*                                                          lower (i.e. higher number) than the idle task.
-*                            OS_ERR_xxx                    An error code returned by OSTaskCreate()
+*                            OS_ERR_STK_INVALID       If you specified a NULL stack pointer during configuration
+*                            OS_ERR_STK_SIZE_INVALID  If you didn't specify a large enough stack.
+*                            OS_ERR_PRIO_INVALID      If you specified a priority for the statistic task equal to or
+*                                                     lower (i.e. higher number) than the idle task.
+*                            OS_ERR_xxx               An error code returned by OSTaskCreate()
 *
 * Returns    : none
 *
@@ -540,12 +506,8 @@ void  OS_StatTaskInit (OS_ERR  *p_err)
     OSStatTaskRdy    = OS_STATE_NOT_RDY;                        /* Statistic task is not ready                          */
     OSStatResetFlag  = DEF_FALSE;
 
-#if (OS_CFG_STAT_TASK_STK_CHK_EN == DEF_ENABLED) && (OS_CFG_ISR_STK_SIZE > 0u)
-    OSISRStkFree     = 0u;
-    OSISRStkUsed     = 0u;
-#endif
                                                                 /* --------------- CREATE THE STAT TASK --------------- */
-    if (OSCfg_StatTaskStkBasePtr == (CPU_STK *)0) {
+    if (OSCfg_StatTaskStkBasePtr == DEF_NULL) {
        *p_err = OS_ERR_STAT_STK_INVALID;
         return;
     }
@@ -561,22 +523,18 @@ void  OS_StatTaskInit (OS_ERR  *p_err)
     }
 
     OSTaskCreate(&OSStatTaskTCB,
-#if  (OS_CFG_DBG_EN == DEF_DISABLED)
-                 (CPU_CHAR   *)0,
-#else
-                 (CPU_CHAR   *)"uC/OS-III Stat Task",
-#endif
-                  OS_StatTask,
-                 (void       *)0,
-                  OSCfg_StatTaskPrio,
-                  OSCfg_StatTaskStkBasePtr,
-                  OSCfg_StatTaskStkLimit,
-                  OSCfg_StatTaskStkSize,
-                  0u,
-                  0u,
-                 (void       *)0,
+                 (CPU_CHAR   *)((void *)"uC/OS-III Stat Task"),
+                 OS_StatTask,
+                 DEF_NULL,
+                 OSCfg_StatTaskPrio,
+                 OSCfg_StatTaskStkBasePtr,
+                 OSCfg_StatTaskStkLimit,
+                 OSCfg_StatTaskStkSize,
+                 0u,
+                 0u,
+                 DEF_NULL,
                  (OS_OPT_TASK_STK_CHK | OS_OPT_TASK_STK_CLR),
-                  p_err);
+                 p_err);
 }
 
 #endif
