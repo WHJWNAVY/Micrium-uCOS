@@ -2,7 +2,7 @@
 @                                                uC/LIB
 @                                        CUSTOM LIBRARY MODULES
 @
-@                          (c) Copyright 2004-2011; Micrium, Inc.; Weston, FL
+@                          (c) Copyright 2004-2015; Micrium, Inc.; Weston, FL
 @
 @               All rights reserved.  Protected by international copyright laws.
 @
@@ -26,7 +26,7 @@
 @                                           GNU Compiler
 @
 @ Filename      : lib_mem_a.s
-@ Version       : V1.38.01.00
+@ Version       : V1.38.02.00
 @ Programmer(s) : JDH
 @                 DC
 @********************************************************************************************************
@@ -65,7 +65,6 @@
 .thumb
 .syntax unified
 
-@$PAGE
 @********************************************************************************************************
 @                                             Mem_Copy()
 @
@@ -122,7 +121,6 @@ Mem_Copy_3:
         STMFD       SP!, {R3-R12}           @ save registers on stack
 
 
-@$PAGE
 Chk_Align_32:                               @ check if both dest & src 32-bit aligned
         AND         R3, R0, #0x03
         AND         R4, R1, #0x03
@@ -205,7 +203,6 @@ Copy_32_3:
         SUB         R2, R2, #(04*01*01)
         B           Copy_32_3
 
-@$PAGE
 Copy_16_1:
         CMP         R2, #(02*01*16)         @ Copy chunks of 16 16-bit words (32 bytes per loop)
         BCC         Copy_16_2
@@ -252,7 +249,6 @@ Copy_16_2:
         SUB         R2, R2, #(02*01*01)
         B           Copy_16_2
 
-@$PAGE
 Copy_08_1:
         CMP         R2, #(01*01*16)         @ Copy chunks of 16 8-bit words (16 bytes per loop)
         BCC         Copy_08_2

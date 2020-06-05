@@ -3,7 +3,7 @@
 *                                                uC/LIB
 *                                        CUSTOM LIBRARY MODULES
 *
-*                         (c) Copyright 2004-2014; Micrium, Inc.; Weston, FL
+*                         (c) Copyright 2004-2015; Micrium, Inc.; Weston, FL
 *
 *                  All rights reserved.  Protected by international copyright laws.
 *
@@ -16,9 +16,9 @@
 *                  software available.  Your honesty is greatly appreciated.
 *
 *                  You can find our product's user manual, API reference, release notes and
-*                  more information at: https://doc.micrium.com
+*                  more information at: doc.micrium.com
 *
-*                  You can contact us at: http://www.micrium.com
+*                  You can contact us at: www.micrium.com
 *********************************************************************************************************
 */
 
@@ -28,7 +28,7 @@
 *                                     STANDARD MEMORY OPERATIONS
 *
 * Filename      : lib_mem.c
-* Version       : V1.38.01
+* Version       : V1.38.02
 * Programmer(s) : ITJ
 *                 FGK
 *                 JFD
@@ -124,9 +124,11 @@ static  void          Mem_SegCreateCritical    (const  CPU_CHAR      *p_name,
                                                        CPU_SIZE_T     padding_align,
                                                        CPU_SIZE_T     size);
 
+#if  (LIB_MEM_CFG_HEAP_SIZE > 0u)
 static  MEM_SEG      *Mem_SegOverlapChkCritical(       CPU_ADDR       seg_base_addr,
                                                        CPU_SIZE_T     size,
                                                        LIB_ERR       *p_err);
+#endif
 
 static  void         *Mem_SegAllocInternal     (const  CPU_CHAR      *p_name,
                                                        MEM_SEG       *p_seg,
@@ -442,7 +444,7 @@ void  Mem_Copy (       void        *pdest,
     pmem_08_dest       = (      CPU_INT08U *)pdest;
     pmem_08_src        = (const CPU_INT08U *)psrc;
 
-    mem_gap_octets     = pmem_08_src - pmem_08_dest;
+    mem_gap_octets     = (CPU_SIZE_T)(pmem_08_src - pmem_08_dest);
 
 
     if (mem_gap_octets >= sizeof(CPU_ALIGN)) {                  /* Avoid bufs overlap.                                  */
@@ -559,7 +561,7 @@ void  Mem_Move (       void        *pdest,
     pmem_08_dest       = (      CPU_INT08U *)pdest + size - 1;
     pmem_08_src        = (const CPU_INT08U *)psrc  + size - 1;
 
-    mem_gap_octets     = pmem_08_dest - pmem_08_src;
+    mem_gap_octets     = (CPU_SIZE_T)(pmem_08_dest - pmem_08_src);
 
 
     if (mem_gap_octets >= sizeof(CPU_ALIGN)) {                  /* Avoid bufs overlap.                                  */
@@ -573,7 +575,7 @@ void  Mem_Move (       void        *pdest,
         if (mem_aligned == DEF_YES) {                           /* If mem bufs' alignment offset equal, ...             */
                                                                 /* ... optimize copy for mem buf alignment.             */
             if (mem_align_mod_dest != (sizeof(CPU_ALIGN) - 1)) {/* If leading octets avail,                   ...       */
-                i = mem_align_mod_dest;
+                i = (CPU_INT08S)mem_align_mod_dest;
                 while ((size_rem   >  0) &&                     /* ... start mem buf copy with leading octets ...       */
                        (i          >= 0)) {                     /* ... until next CPU_ALIGN word boundary.              */
                    *pmem_08_dest-- = *pmem_08_src--;
@@ -583,8 +585,8 @@ void  Mem_Move (       void        *pdest,
             }
 
                                                                 /* See Note #3.                                         */
-            pmem_align_dest = (      CPU_ALIGN *)((CPU_INT08U *)pmem_08_dest - sizeof(CPU_ALIGN) + 1);
-            pmem_align_src  = (const CPU_ALIGN *)((CPU_INT08U *)pmem_08_src  - sizeof(CPU_ALIGN) + 1);
+            pmem_align_dest = (      CPU_ALIGN *)(((CPU_INT08U *)pmem_08_dest - sizeof(CPU_ALIGN)) + 1);
+            pmem_align_src  = (const CPU_ALIGN *)(((CPU_INT08U *)pmem_08_src  - sizeof(CPU_ALIGN)) + 1);
             while (size_rem      >=  sizeof(CPU_ALIGN)) {       /* While mem bufs aligned on CPU_ALIGN word boundaries, */
                *pmem_align_dest-- = *pmem_align_src--;          /* ... copy psrc to pdest with CPU_ALIGN-sized words.   */
                 size_rem         -=  sizeof(CPU_ALIGN);
@@ -1036,7 +1038,7 @@ CPU_SIZE_T  Mem_SegRemSizeGet (MEM_SEG       *p_seg,
 
 #if (LIB_MEM_CFG_ARG_CHK_EXT_EN == DEF_ENABLED)
     if (p_err == DEF_NULL) {                                    /* Chk for null err ptr.                                */
-        CPU_SW_EXCEPTION(seg_info);
+        CPU_SW_EXCEPTION(0);
     }
 
     if (MATH_IS_PWR2(align) != DEF_YES) {                       /* Chk for invalid align val.                           */
@@ -1058,9 +1060,15 @@ CPU_SIZE_T  Mem_SegRemSizeGet (MEM_SEG       *p_seg,
     next_addr_align = MATH_ROUND_INC_UP_PWR2(p_seg->AddrNext, align);
     CPU_CRITICAL_EXIT();
 
-    total_size = p_seg->AddrEnd  - p_seg->AddrBase + 1u;
-    used_size  = next_addr_align - p_seg->AddrBase;
-    rem_size   = total_size      - used_size;
+    total_size = (p_seg->AddrEnd  - p_seg->AddrBase) + 1u;
+    used_size  =  p_seg->AddrNext - p_seg->AddrBase;
+
+    if (next_addr_align > p_seg->AddrEnd){
+        next_addr_align = 0u;
+        rem_size        = 0u;
+    } else {
+        rem_size        = total_size - (next_addr_align - p_seg->AddrBase);
+    }
 
     if (p_seg_info != DEF_NULL) {
         p_seg_info->TotalSize     = total_size;
@@ -1310,7 +1318,7 @@ void  *Mem_SegAllocHW (const  CPU_CHAR    *p_name,
 *
 *                                   (a) Return the number of bytes required to successfully
 *                                               allocate the memory pool, if any error(s);
-*                                       (b) Return 0, otherwise.
+*                                   (b) Return 0, otherwise.
 *
 *               p_err           Pointer to variable that will receive the return error code from this function :
 *
@@ -1477,13 +1485,13 @@ void  Mem_PoolCreate (MEM_POOL          *p_pool,
     }
 
                                                                 /* ------------ ALLOC MEM FOR FREE BLK TBL ------------ */
-    p_pool->BlkFreeTbl = (void *)Mem_SegAllocInternal("Unnamed static pool free blk tbl",
-                                                      &Mem_SegHeap,
-                                                       blk_nbr * sizeof(void *),
-                                                       sizeof(CPU_ALIGN),
-                                                       LIB_MEM_PADDING_ALIGN_NONE,
-                                                       p_bytes_reqd,
-                                                       p_err);
+    p_pool->BlkFreeTbl = (void **)Mem_SegAllocInternal("Unnamed static pool free blk tbl",
+                                                       &Mem_SegHeap,
+                                                        blk_nbr * sizeof(void *),
+                                                        sizeof(CPU_ALIGN),
+                                                        LIB_MEM_PADDING_ALIGN_NONE,
+                                                        p_bytes_reqd,
+                                                        p_err);
     if (*p_err != LIB_MEM_ERR_NONE) {
         return;
     }
@@ -1515,7 +1523,7 @@ void  Mem_PoolCreate (MEM_POOL          *p_pool,
 *
 * Argument(s) : p_pool   Pointer to a memory pool structure to clear (see Note #2).
 *
-*               p_err        Pointer to variable that will receive the return error code from this function :
+*               p_err    Pointer to variable that will receive the return error code from this function :
 *
 *                               LIB_MEM_ERR_NONE                Operation was successful.
 *                               LIB_MEM_ERR_NULL_PTR            Argument 'p_pool' passed a NULL pointer.
@@ -1603,8 +1611,6 @@ void  *Mem_PoolBlkGet (MEM_POOL    *p_pool,
     CPU_SR_ALLOC();
 
 
-   (void)&size;                                                 /* Prevent possible 'variable unused' warning.          */
-
 #if (LIB_MEM_CFG_ARG_CHK_EXT_EN == DEF_ENABLED)                 /* -------------- VALIDATE MEM POOL GET --------------- */
     if (p_err == DEF_NULL) {                                    /* Validate err ptr.                                    */
         CPU_SW_EXCEPTION(DEF_NULL);
@@ -1624,6 +1630,8 @@ void  *Mem_PoolBlkGet (MEM_POOL    *p_pool,
        *p_err = LIB_MEM_ERR_INVALID_BLK_SIZE;
         return (DEF_NULL);
     }
+#else
+    (void)size;                                                 /* Prevent possible 'variable unused' warning.          */
 #endif
 
 
@@ -1631,9 +1639,9 @@ void  *Mem_PoolBlkGet (MEM_POOL    *p_pool,
     p_blk = DEF_NULL;
     CPU_CRITICAL_ENTER();
     if (p_pool->BlkFreeTblIx > 0u) {
-        p_pool->BlkFreeTblIx                     -= 1u;
-        p_blk                                     = p_pool->BlkFreeTbl[p_pool->BlkFreeTblIx];
-        p_pool->BlkFreeTbl[p_pool->BlkFreeTblIx]  = DEF_NULL;
+        p_pool->BlkFreeTblIx                     -=  1u;
+        p_blk                                     = (CPU_INT08U *)p_pool->BlkFreeTbl[p_pool->BlkFreeTblIx];
+        p_pool->BlkFreeTbl[p_pool->BlkFreeTblIx]  =  DEF_NULL;
     }
     CPU_CRITICAL_EXIT();
 
@@ -1851,7 +1859,7 @@ void  Mem_DynPoolCreate (const  CPU_CHAR      *p_name,
         p_seg = &Mem_SegHeap;
 #else
        *p_err = LIB_MEM_ERR_NULL_PTR;
-        return (DEF_NULL);
+        return;
 #endif
     }
 
@@ -1923,7 +1931,7 @@ void  Mem_DynPoolCreateHW (const  CPU_CHAR      *p_name,
         p_seg = &Mem_SegHeap;
 #else
        *p_err = LIB_MEM_ERR_NULL_PTR;
-        return (DEF_NULL);
+        return;
 #endif
     }
 
@@ -2139,7 +2147,7 @@ CPU_SIZE_T  Mem_DynPoolBlkNbrAvailGet (MEM_DYN_POOL  *p_pool,
 
 #if (LIB_MEM_CFG_ARG_CHK_EXT_EN == DEF_ENABLED)
     if (p_err == DEF_NULL) {                                    /* Chk for NULL err ptr.                                */
-        CPU_SW_EXCEPTION(;);
+        CPU_SW_EXCEPTION(0);
     }
 
     if (p_pool == DEF_NULL) {                                   /* Chk for NULL pool data ptr.                          */
@@ -2211,9 +2219,9 @@ void  Mem_OutputUsage(void     (*out_fnct) (CPU_CHAR *),
     }
 #endif
 
-    out_fnct("---------------- Memory allocation info ----------------\r\n");
-    out_fnct("| Type    | Size       | Free size  | Name\r\n");
-    out_fnct("|---------|------------|------------|-------------------\r\n");
+    out_fnct((CPU_CHAR *)"---------------- Memory allocation info ----------------\r\n");
+    out_fnct((CPU_CHAR *)"| Type    | Size       | Free size  | Name\r\n");
+    out_fnct((CPU_CHAR *)"|---------|------------|------------|-------------------\r\n");
 
     CPU_CRITICAL_ENTER();
     p_seg = Mem_SegHeadPtr;
@@ -2228,7 +2236,7 @@ void  Mem_OutputUsage(void     (*out_fnct) (CPU_CHAR *),
             return;
         }
 
-        out_fnct("| Section | ");
+        out_fnct((CPU_CHAR *)"| Section | ");
 
         (void)Str_FmtNbr_Int32U(seg_info.TotalSize,
                                 10u,
@@ -2239,7 +2247,7 @@ void  Mem_OutputUsage(void     (*out_fnct) (CPU_CHAR *),
                                &str[0u]);
 
         out_fnct(str);
-        out_fnct(" | ");
+        out_fnct((CPU_CHAR *)" | ");
 
         (void)Str_FmtNbr_Int32U(rem_size,
                                 10u,
@@ -2250,13 +2258,13 @@ void  Mem_OutputUsage(void     (*out_fnct) (CPU_CHAR *),
                                &str[0u]);
 
         out_fnct(str);
-        out_fnct(" | ");
+        out_fnct((CPU_CHAR *)" | ");
         out_fnct((p_seg->NamePtr != DEF_NULL) ? (CPU_CHAR *)p_seg->NamePtr : (CPU_CHAR *)"Unknown");
-        out_fnct("\r\n");
+        out_fnct((CPU_CHAR *)"\r\n");
 
         p_alloc = p_seg->AllocInfoHeadPtr;
         while (p_alloc != DEF_NULL) {
-            out_fnct("| -> Obj  | ");
+            out_fnct((CPU_CHAR *)"| -> Obj  | ");
 
             (void)Str_FmtNbr_Int32U(p_alloc->Size,
                                     10u,
@@ -2267,10 +2275,10 @@ void  Mem_OutputUsage(void     (*out_fnct) (CPU_CHAR *),
                                    &str[0u]);
 
             out_fnct(str);
-            out_fnct(" |            | ");
+            out_fnct((CPU_CHAR *)" |            | ");
 
             out_fnct((p_alloc->NamePtr != DEF_NULL) ? (CPU_CHAR *)p_alloc->NamePtr : (CPU_CHAR *)"Unknown");
-            out_fnct("\r\n");
+            out_fnct((CPU_CHAR *)"\r\n");
 
             p_alloc = p_alloc->NextPtr;
         }
@@ -2340,7 +2348,7 @@ static  void  Mem_SegCreateCritical(const  CPU_CHAR    *p_name,
     p_seg->NamePtr          = p_name;
     p_seg->AllocInfoHeadPtr = DEF_NULL;
 #else
-    (void)&p_name;
+    (void)p_name;
 #endif
 
     Mem_SegHeadPtr = p_seg;
@@ -2373,6 +2381,7 @@ static  void  Mem_SegCreateCritical(const  CPU_CHAR    *p_name,
 *********************************************************************************************************
 */
 
+#if  (LIB_MEM_CFG_HEAP_SIZE      >  0u)
 static  MEM_SEG  *Mem_SegOverlapChkCritical (CPU_ADDR     seg_base_addr,
                                              CPU_SIZE_T   size,
                                              LIB_ERR     *p_err)
@@ -2406,6 +2415,7 @@ static  MEM_SEG  *Mem_SegOverlapChkCritical (CPU_ADDR     seg_base_addr,
 
     return (DEF_NULL);
 }
+#endif
 
 
 /*
@@ -2428,7 +2438,7 @@ static  MEM_SEG  *Mem_SegOverlapChkCritical (CPU_ADDR     seg_base_addr,
 *                               means no padding.
 *
 *               p_bytes_reqd    Pointer to variable that will receive the number of free bytes missing for
-*                                the allocation to succeed. Set to DEF_NULL to skip calculation.
+*                               the allocation to succeed. Set to DEF_NULL to skip calculation.
 *
 *               p_err           Pointer to variable that will receive the return error code from this function :
 *
@@ -2505,7 +2515,7 @@ static  void  *Mem_SegAllocInternal (const  CPU_CHAR    *p_name,
         return (DEF_NULL);
     }
 #else
-    (void)&p_name;
+    (void)p_name;
 #endif
     CPU_CRITICAL_EXIT();
 
@@ -2566,8 +2576,8 @@ static  void  *Mem_SegAllocExtCritical (MEM_SEG     *p_seg,
                                           blk_align);
     addr_next    = MATH_ROUND_INC_UP_PWR2(blk_addr + size,      /* Compute addr of next alloc.                          */
                                           padding_align);
-    size_rem_seg = p_seg->AddrEnd - p_seg->AddrNext + 1u;
-    size_tot_blk = addr_next - p_seg->AddrNext;                 /* Compute tot blk size including align and padding.    */
+    size_rem_seg = (p_seg->AddrEnd - p_seg->AddrNext) + 1u;
+    size_tot_blk =  addr_next      - p_seg->AddrNext;           /* Compute tot blk size including align and padding.    */
     if (size_rem_seg < size_tot_blk) {                          /* If seg doesn't have enough space ...                 */
         if (p_bytes_reqd != DEF_NULL) {                         /* ... calc nbr of req'd bytes.                         */
            *p_bytes_reqd = size_tot_blk - size_rem_seg;
@@ -2636,12 +2646,12 @@ static  void  Mem_SegAllocTrackCritical (const  CPU_CHAR    *p_name,
     }
 
                                                                 /* --------- ADD NEW ALLOC INFO ENTRY IN LIST --------- */
-    p_alloc = Mem_SegAllocExtCritical(&Mem_SegHeap,             /* Alloc new alloc info struct on heap.                 */
-                                       sizeof(MEM_ALLOC_INFO),
-                                       sizeof(CPU_ALIGN),
-                                       LIB_MEM_PADDING_ALIGN_NONE,
-                                       DEF_NULL,
-                                       p_err);
+    p_alloc = (MEM_ALLOC_INFO *)Mem_SegAllocExtCritical(&Mem_SegHeap,             /* Alloc new alloc info struct on heap.                 */
+                                                         sizeof(MEM_ALLOC_INFO),
+                                                         sizeof(CPU_ALIGN),
+                                                         LIB_MEM_PADDING_ALIGN_NONE,
+                                                         DEF_NULL,
+                                                         p_err);
     if (*p_err != LIB_MEM_ERR_NONE) {
         return;
     }
@@ -2713,14 +2723,14 @@ static  void  Mem_DynPoolCreateInternal (const  CPU_CHAR      *p_name,
                                                 CPU_SIZE_T     blk_qty_max,
                                                 LIB_ERR       *p_err)
 {
-    CPU_INT08U  *p_blks;
+    CPU_INT08U  *p_blks          = DEF_NULL;
     CPU_SIZE_T   blk_size_align;
     CPU_SIZE_T   blk_align_worst = DEF_MAX(blk_align, blk_padding_align);
 
 
 #if (LIB_MEM_CFG_ARG_CHK_EXT_EN == DEF_ENABLED)
     if (p_err == DEF_NULL) {                                    /* Chk for NULL err ptr.                                */
-        CPU_SW_EXCEPTION(DEF_NULL);
+        CPU_SW_EXCEPTION(;);
     }
 
     if (p_pool == DEF_NULL) {                                   /* Chk for NULL pool data ptr.                          */
@@ -2754,31 +2764,20 @@ static  void  Mem_DynPoolCreateInternal (const  CPU_CHAR      *p_name,
     }
 
     if (blk_qty_init != 0u) {                                   /* Alloc init blks.                                     */
+        CPU_SIZE_T  i;
         p_blks = (CPU_INT08U *)Mem_SegAllocInternal(p_name,
                                                     p_seg,
                                                     blk_size_align * blk_qty_init,
-                                                    blk_align_worst,
+                                                    DEF_MAX(blk_align, sizeof(void *)),
                                                     LIB_MEM_PADDING_ALIGN_NONE,
                                                     DEF_NULL,
                                                     p_err);
         if (*p_err != LIB_MEM_ERR_NONE) {
             return;
         }
-    }
-
 
                                                                 /* ----------------- CREATE POOL DATA ----------------- */
-    p_pool->PoolSegPtr      = p_seg;
-    p_pool->BlkSize         = blk_size;
-    p_pool->BlkAlign        = blk_align_worst;
-    p_pool->BlkPaddingAlign = blk_padding_align;
-    p_pool->BlkQtyMax       = blk_qty_max;
-    p_pool->BlkAllocCnt     = 0u;
-
-    if (blk_qty_init != 0u) {                                   /* Init free list.                                      */
-        CPU_SIZE_T  i;
-
-
+                                                                /* Init free list.                                      */
         p_pool->BlkFreePtr = (void *)p_blks;
         for (i = 0u; i < blk_qty_init - 1u; i++) {
            *((void **)p_blks)  = p_blks + blk_size_align;
@@ -2788,6 +2787,17 @@ static  void  Mem_DynPoolCreateInternal (const  CPU_CHAR      *p_name,
     } else {
         p_pool->BlkFreePtr = DEF_NULL;
     }
+
+#if (LIB_MEM_CFG_HEAP_SIZE > 0u)
+    p_pool->PoolSegPtr      = ((p_seg != DEF_NULL) ? p_seg : &Mem_SegHeap);
+#else
+    p_pool->PoolSegPtr      =   p_seg;
+#endif
+    p_pool->BlkSize         =   blk_size;
+    p_pool->BlkAlign        =   blk_align_worst;
+    p_pool->BlkPaddingAlign =   blk_padding_align;
+    p_pool->BlkQtyMax       =   blk_qty_max;
+    p_pool->BlkAllocCnt     =   0u;
 
 #if (LIB_MEM_CFG_DBG_INFO_EN == DEF_ENABLED)
     p_pool->NamePtr = p_name;
@@ -2815,7 +2825,7 @@ static  void  Mem_DynPoolCreateInternal (const  CPU_CHAR      *p_name,
 *
 * Caller(s)   : Mem_PoolBlkFree().
 *
-* Note(s)     : none.
+* Note(s)     : (1) This function is DEPRECATED and will be removed in a future version of this product.
 *********************************************************************************************************
 */
 
